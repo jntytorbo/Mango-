@@ -1,0 +1,1865 @@
+package com.example.ui.screens
+
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.CalendarToday
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Videocam
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.BiasAlignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.res.painterResource
+import com.example.R
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import com.example.ui.components.SmoothProgressIndicator
+import com.example.network.StashDbApiService
+import com.example.network.StashPerformer
+import com.example.network.StashScene
+import com.example.network.StashStudio
+import com.example.ui.MainViewModel
+import com.example.ui.ScreenState
+import com.example.ui.theme.LocalAccentColor
+import com.example.ui.theme.LocalBetaTestPrivacy
+import com.example.ui.theme.LocalVaultPalette
+import com.example.ui.theme.privacyImageBlur
+import kotlinx.coroutines.launch
+
+import com.example.ui.StashSearchType
+
+private val StudioLogoBgDark = Color(0xFF0F0F12)
+private val StudioLogoBgLight = Color(0xFF1F2937) // Dark gray on light theme
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun StashDbScreen(
+    viewModel: MainViewModel,
+    onOpenDrawer: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val palette = LocalVaultPalette.current
+    val accent = LocalAccentColor.current
+    val coroutineScope = rememberCoroutineScope()
+    val focusManager = LocalFocusManager.current
+    val focusRequester = remember { FocusRequester() }
+
+    val settings by viewModel.settings.collectAsStateWithLifecycle()
+
+    val savedLinks by viewModel.allLinks.collectAsStateWithLifecycle()
+    val savedStashDbIds = remember(savedLinks) {
+        savedLinks.mapNotNull { it.stashDbId }.toSet()
+    }
+    val savedTitleAndDatePairs = remember(savedLinks) {
+        savedLinks.map { Pair(it.title.trim().lowercase(), it.assignedDate) }.toSet()
+    }
+
+    // Persistent state from MainViewModel
+    val searchQuery by viewModel.stashSearchQuery.collectAsStateWithLifecycle()
+    val activeType by viewModel.stashActiveType.collectAsStateWithLifecycle()
+    val isSearchExpanded by viewModel.isStashSearchExpanded.collectAsStateWithLifecycle()
+
+    val performerResults by viewModel.stashPerformerResults.collectAsStateWithLifecycle()
+    val studioResults by viewModel.stashStudioResults.collectAsStateWithLifecycle()
+
+    val selectedPerformer by viewModel.stashSelectedPerformer.collectAsStateWithLifecycle()
+    val selectedStudio by viewModel.stashSelectedStudio.collectAsStateWithLifecycle()
+
+    val scenesList by viewModel.stashScenesList.collectAsStateWithLifecycle()
+    val selectedSceneIds by viewModel.stashSelectedSceneIds.collectAsStateWithLifecycle()
+
+    val isSearchingTarget by viewModel.isStashLoadingEntities.collectAsStateWithLifecycle()
+    val isLoadingScenes by viewModel.isStashLoadingScenes.collectAsStateWithLifecycle()
+    val isLoadingMore by viewModel.isStashLoadingMore.collectAsStateWithLifecycle()
+    val canLoadMore by viewModel.stashCanLoadMore.collectAsStateWithLifecycle()
+    val searchError by viewModel.stashSearchError.collectAsStateWithLifecycle()
+
+    val isSavingWithProgress by viewModel.isSavingWithProgress.collectAsStateWithLifecycle()
+    val saveProgressCurrent by viewModel.saveProgressCurrent.collectAsStateWithLifecycle()
+    val saveProgressTotal by viewModel.saveProgressTotal.collectAsStateWithLifecycle()
+    val saveCurrentTitle by viewModel.saveCurrentTitle.collectAsStateWithLifecycle()
+    val saveCurrentPhase by viewModel.saveCurrentPhase.collectAsStateWithLifecycle()
+    val saveSavedWithTorrentsCount by viewModel.saveSavedWithTorrentsCount.collectAsStateWithLifecycle()
+
+    // System Back Press Handling
+    BackHandler {
+        if (isSavingWithProgress) {
+            return@BackHandler
+        } else if (selectedSceneIds.isNotEmpty()) {
+            viewModel.clearStashSelection()
+        } else if (isSearchExpanded) {
+            viewModel.setStashSearchExpanded(false)
+            viewModel.setStashSearchQuery("")
+        } else {
+            viewModel.navigateBack()
+        }
+    }
+
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // Grid state and smooth scroll-driven visibility for the horizontal results row
+    val gridState = rememberLazyGridState()
+    var isHorizontalResultsVisible by remember { mutableStateOf(true) }
+
+    val nestedScrollConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                val delta = available.y
+                if (delta < -3f && isHorizontalResultsVisible) {
+                    isHorizontalResultsVisible = false
+                } else if (delta > 3f && !isHorizontalResultsVisible) {
+                    isHorizontalResultsVisible = true
+                }
+                return Offset.Zero
+            }
+
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource
+            ): Offset {
+                if (available.y > 1f && !isHorizontalResultsVisible) {
+                    isHorizontalResultsVisible = true
+                }
+                return Offset.Zero
+            }
+        }
+    }
+
+    // Dynamic scroll observation: restore visibility whenever list returns to top
+    val isAtTop by remember {
+        derivedStateOf {
+            gridState.firstVisibleItemIndex == 0 && gridState.firstVisibleItemScrollOffset <= 4
+        }
+    }
+
+    LaunchedEffect(isAtTop) {
+        if (isAtTop) {
+            isHorizontalResultsVisible = true
+        }
+    }
+
+    // Reset visibility on selection change or mode change
+    LaunchedEffect(selectedPerformer, selectedStudio, activeType) {
+        isHorizontalResultsVisible = true
+    }
+
+    // Trigger loading more when scrolling near bottom
+    val shouldLoadMore by remember {
+        derivedStateOf {
+            val totalItems = scenesList.size
+            if (totalItems == 0 || isLoadingScenes || isLoadingMore || !canLoadMore || searchError != null) {
+                false
+            } else {
+                val lastVisibleItem = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+                lastVisibleItem >= totalItems - 6
+            }
+        }
+    }
+
+    LaunchedEffect(shouldLoadMore) {
+        if (shouldLoadMore) {
+            viewModel.loadMoreStashScenes(settings.stashDbApiKey)
+        }
+    }
+
+    var studioToBlock by remember { mutableStateOf<Pair<String?, String>?>(null) }
+
+    // Save all selected scenes to Links with batch DB insert and torrent fetching
+    val saveSelectedScenes = {
+        if (!isSavingWithProgress) {
+            viewModel.saveSelectedStashScenesWithProgress { savedCount, torrentsCount ->
+                coroutineScope.launch {
+                    val msg = when {
+                        savedCount == 0 -> "No scenes saved"
+                        savedCount == 1 -> if (torrentsCount > 0) "Saved 1 scene (1 with torrent)!" else "Saved 1 scene!"
+                        else -> if (torrentsCount > 0) "Saved $savedCount scenes ($torrentsCount with torrents)!" else "Saved $savedCount scenes!"
+                    }
+                    snackbarHostState.showSnackbar(msg)
+                }
+            }
+        }
+    }
+
+    if (isSavingWithProgress) {
+        val total = saveProgressTotal
+        val current = saveProgressCurrent
+        val percentage = if (total > 0) ((current.toFloat() / total) * 100).toInt().coerceIn(0, 100) else 0
+        val progressFraction = if (total > 0) (current.toFloat() / total).coerceIn(0f, 1f) else 0f
+
+        AlertDialog(
+            onDismissRequest = { /* Non-dismissable on touch outside */ },
+            shape = RoundedCornerShape(28.dp),
+            containerColor = palette.cardBg,
+            title = {
+                Text(
+                    text = "Saving Scenes...",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 19.sp,
+                    color = palette.textPrimary,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    LinearProgressIndicator(
+                        progress = { progressFraction },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(8.dp)
+                            .clip(RoundedCornerShape(4.dp)),
+                        color = accent,
+                        trackColor = palette.border
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Scene $current of $total ($percentage%)",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = palette.textPrimary
+                        )
+                        if (saveSavedWithTorrentsCount > 0) {
+                            Text(
+                                text = "Torrents: $saveSavedWithTorrentsCount",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = accent
+                            )
+                        }
+                    }
+
+                    if (saveCurrentTitle.isNotBlank()) {
+                        Text(
+                            text = saveCurrentTitle,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = palette.textSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    if (saveCurrentPhase.isNotBlank()) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(12.dp),
+                                strokeWidth = 1.5.dp,
+                                color = accent
+                            )
+                            Text(
+                                text = saveCurrentPhase,
+                                fontSize = 11.5.sp,
+                                color = palette.textMuted
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(
+                    onClick = { viewModel.cancelBatchSave() },
+                    shape = CircleShape,
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    modifier = Modifier.testTag("cancel_batch_save_button")
+                ) {
+                    Text(
+                        text = "Cancel",
+                        color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        )
+    }
+
+    if (studioToBlock != null) {
+        val targetName = studioToBlock?.second ?: ""
+        val targetId = studioToBlock?.first
+        AlertDialog(
+            onDismissRequest = { studioToBlock = null },
+            shape = RoundedCornerShape(28.dp),
+            containerColor = palette.cardBg,
+            icon = {
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.error.copy(alpha = 0.12f),
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_settings_filter),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+            },
+            title = {
+                Text(
+                    text = "Block Studio?",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 19.sp,
+                    color = palette.textPrimary,
+                    textAlign = TextAlign.Center
+                )
+            },
+            text = {
+                Text(
+                    text = "Do you want to block \"$targetName\"? Scenes from this studio will be filtered out from StashDB results.",
+                    color = palette.textSecondary,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                    textAlign = TextAlign.Center
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.blockStudio(targetId, targetName)
+                        studioToBlock = null
+                        coroutineScope.launch {
+                            snackbarHostState.showSnackbar("Blocked studio: $targetName")
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = Color.White
+                    ),
+                    shape = CircleShape,
+                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 10.dp)
+                ) {
+                    Text("Block Studio", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { studioToBlock = null },
+                    shape = CircleShape,
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp)
+                ) {
+                    Text("Cancel", color = palette.textSecondary, fontWeight = FontWeight.Medium)
+                }
+            }
+        )
+    }
+
+    val topBarContent = LocalTopBarContent.current
+    DisposableEffect(Unit) {
+        onDispose {
+            topBarContent.value = null
+        }
+    }
+    SideEffect {
+        topBarContent.value = {
+            TopAppBar(
+                title = {
+                    if (isSearchExpanded) {
+                        LaunchedEffect(Unit) {
+                            focusRequester.requestFocus()
+                        }
+                        BasicTextField(
+                            value = searchQuery,
+                            onValueChange = { viewModel.setStashSearchQuery(it) },
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                color = palette.textPrimary,
+                                fontSize = 15.sp
+                            ),
+                            cursorBrush = SolidColor(accent),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                            keyboardActions = KeyboardActions(
+                                onSearch = {
+                                    focusManager.clearFocus()
+                                    viewModel.performStashSearch(settings.stashDbApiKey, searchQuery)
+                                }
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .focusRequester(focusRequester)
+                                .testTag("stashdb_header_search_input"),
+                            decorationBox = { innerTextField ->
+                                Box(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    contentAlignment = Alignment.CenterStart
+                                ) {
+                                    if (searchQuery.isEmpty()) {
+                                        Text(
+                                            text = when (activeType) {
+                                                StashSearchType.ACTORS -> "Search actor..."
+                                                StashSearchType.STUDIO -> "Search studio..."
+                                                StashSearchType.SEXMEX -> "Paste SexMex Scene URL or Model..."
+                                            },
+                                            style = MaterialTheme.typography.bodyLarge.copy(
+                                                fontSize = 15.sp,
+                                                color = palette.textMuted
+                                            ),
+                                            maxLines = 1,
+                                             overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    innerTextField()
+                                }
+                            }
+                        )
+                    } else {
+                        Text(
+                            text = "StashDB",
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = (-0.5).sp
+                            ),
+                            color = palette.textPrimary
+                        )
+                    }
+                },
+                navigationIcon = {
+                    if (isSearchExpanded) {
+                        IconButton(
+                            onClick = {
+                                viewModel.setStashSearchExpanded(false)
+                                viewModel.setStashSearchQuery("")
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Close Search",
+                                tint = palette.textPrimary
+                            )
+                        }
+                    } else {
+                        IconButton(
+                            onClick = { viewModel.navigateBack() },
+                            modifier = Modifier.testTag("back_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                tint = palette.textPrimary
+                            )
+                        }
+                    }
+                },
+                actions = {
+                    // 1. Always accessible Save button when items are selected
+                    if (selectedSceneIds.isNotEmpty()) {
+                        IconButton(
+                            onClick = { saveSelectedScenes() },
+                            enabled = !isSavingWithProgress,
+                            modifier = Modifier.testTag("save_selected_scenes_button")
+                        ) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.ic_action_save),
+                                contentDescription = "Save Selected Scenes",
+                                tint = if (!isSavingWithProgress) accent else palette.textMuted
+                            )
+                        }
+                    }
+
+                    // 2. Search expanded / collapsed action controls
+                    if (isSearchExpanded) {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(
+                                onClick = {
+                                    focusManager.clearFocus()
+                                    viewModel.performStashSearch(settings.stashDbApiKey, searchQuery)
+                                },
+                                modifier = Modifier.testTag("stashdb_header_search_submit")
+                            ) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.ic_app_search),
+                                    contentDescription = "Search",
+                                    tint = accent
+                                )
+                            }
+                            IconButton(
+                                onClick = { viewModel.setStashSearchQuery("") },
+                                modifier = Modifier.testTag("clear_search_text_button")
+                            ) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.ic_action_cancel),
+                                    contentDescription = "Clear text",
+                                    tint = palette.textSecondary
+                                )
+                            }
+                        } else {
+                            IconButton(
+                                onClick = {
+                                    viewModel.setStashSearchExpanded(false)
+                                },
+                                modifier = Modifier.testTag("close_search_action_button")
+                            ) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.ic_action_cancel),
+                                    contentDescription = "Close Search",
+                                    tint = palette.textPrimary
+                                )
+                            }
+                        }
+                    } else {
+                        IconButton(
+                            onClick = { viewModel.setStashSearchExpanded(true) },
+                            modifier = Modifier.testTag("stashdb_search_action_button")
+                        ) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.ic_app_search),
+                                contentDescription = "Search",
+                                tint = palette.textPrimary
+                            )
+                        }
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = palette.surface,
+                    titleContentColor = palette.textPrimary
+                )
+            )
+        }
+    }
+
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        containerColor = palette.bg,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+        topBar = {}
+    ) { padding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = padding.calculateTopPadding())
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Warning Banner: Missing StashDB API Key (Only shown for StashDB tabs: ACTORS & STUDIO)
+                if (settings.stashDbApiKey.isBlank() && activeType != StashSearchType.SEXMEX) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f), // BG-FIX
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.45f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = "API Key Warning",
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "StashDB API Key Missing",
+                                    fontSize = 12.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = palette.textPrimary
+                                )
+                                Text(
+                                    text = "Add your key in Settings to search actors and scenes.",
+                                    fontSize = 11.sp,
+                                    color = palette.textSecondary
+                                )
+                            }
+                            FilledTonalButton(
+                                onClick = { viewModel.navigateTo(ScreenState.Settings) },
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                modifier = Modifier.height(32.dp)
+                            ) {
+                                Text("Settings", fontSize = 11.5.sp)
+                            }
+                        }
+                    }
+                }
+
+                // Search Error Banner (Independent)
+                if (searchError != null) {
+                    Surface(
+                        color = palette.cardBg, // BG-FIX
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.4f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 6.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ErrorOutline,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = searchError ?: "Search failed",
+                                fontSize = 11.5.sp,
+                                color = palette.textPrimary,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+
+                // Two Mode Selector Tabs: Actors & Studio with Smooth Sliding Indicator
+                Surface(
+                    color = palette.surface,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .drawBehind {
+                            drawLine(
+                                color = palette.border,
+                                start = Offset(0f, size.height),
+                                end = Offset(size.width, size.height),
+                                strokeWidth = 1.dp.toPx()
+                            )
+                        } // BG-FIX
+                ) {
+                    val indicatorBias by animateFloatAsState(
+                        targetValue = when (activeType) {
+                            StashSearchType.ACTORS -> -1f
+                            StashSearchType.STUDIO -> 0f
+                            StashSearchType.SEXMEX -> 1f
+                        },
+                        animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing),
+                        label = "stash_tab_indicator_bias"
+                    )
+                    val actorTabColor by animateColorAsState(
+                        targetValue = if (activeType == StashSearchType.ACTORS) accent else palette.textSecondary,
+                        animationSpec = tween(durationMillis = 180),
+                        label = "actor_tab_color"
+                    )
+                    val studioTabColor by animateColorAsState(
+                        targetValue = if (activeType == StashSearchType.STUDIO) accent else palette.textSecondary,
+                        animationSpec = tween(durationMillis = 180),
+                        label = "studio_tab_color"
+                    )
+                    val sexmexTabColor by animateColorAsState(
+                        targetValue = if (activeType == StashSearchType.SEXMEX) accent else palette.textSecondary,
+                        animationSpec = tween(durationMillis = 180),
+                        label = "sexmex_tab_color"
+                    )
+
+                    Column {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                        ) {
+                            Row(modifier = Modifier.fillMaxSize()) {
+                                // Actors Tab
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
+                                        .clickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null,
+                                            onClick = { viewModel.setStashActiveType(StashSearchType.ACTORS, settings.stashDbApiKey) }
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(
+                                            painter = painterResource(id = R.drawable.ic_nav_actor),
+                                            contentDescription = null,
+                                            tint = actorTabColor,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Text(
+                                            text = "Actor",
+                                            fontWeight = if (activeType == StashSearchType.ACTORS) FontWeight.Bold else FontWeight.SemiBold,
+                                            color = actorTabColor
+                                        )
+                                    }
+                                }
+
+                                // Studio Tab
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
+                                        .clickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null,
+                                            onClick = { viewModel.setStashActiveType(StashSearchType.STUDIO, settings.stashDbApiKey) }
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(
+                                            painter = painterResource(id = R.drawable.ic_nav_studio),
+                                            contentDescription = null,
+                                            tint = studioTabColor,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Text(
+                                            text = "Studio",
+                                            fontWeight = if (activeType == StashSearchType.STUDIO) FontWeight.Bold else FontWeight.SemiBold,
+                                            color = studioTabColor
+                                        )
+                                    }
+                                }
+
+                                // SexMex Tab
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
+                                        .clickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null,
+                                            onClick = { viewModel.setStashActiveType(StashSearchType.SEXMEX, settings.stashDbApiKey) }
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(
+                                            painter = painterResource(id = R.drawable.ic_sexmex),
+                                            contentDescription = null,
+                                            tint = sexmexTabColor,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Text(
+                                            text = "SexMex",
+                                            fontWeight = if (activeType == StashSearchType.SEXMEX) FontWeight.Bold else FontWeight.SemiBold,
+                                            color = sexmexTabColor
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Smooth Sliding Indicator Underline
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(3.dp)
+                                    .align(Alignment.BottomCenter)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth(0.333f)
+                                        .fillMaxHeight()
+                                        .align(BiasAlignment(indicatorBias, 0f))
+                                        .padding(horizontal = 16.dp)
+                                        .background(accent, RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp))
+                                )
+                            }
+                        }
+                        HorizontalDivider(color = palette.border)
+                    }
+                }
+
+                // Horizontal Results Row with Smooth Native Scroll-Driven Collapse
+                AnimatedVisibility(
+                    visible = isHorizontalResultsVisible && (performerResults.isNotEmpty() || studioResults.isNotEmpty() || isSearchingTarget),
+                    enter = expandVertically(
+                        animationSpec = spring(
+                            stiffness = Spring.StiffnessMediumLow,
+                            dampingRatio = Spring.DampingRatioNoBouncy
+                        )
+                    ) + fadeIn(animationSpec = tween(150)),
+                    exit = shrinkVertically(
+                        animationSpec = spring(
+                            stiffness = Spring.StiffnessMediumLow,
+                            dampingRatio = Spring.DampingRatioNoBouncy
+                        )
+                    ) + fadeOut(animationSpec = tween(150))
+                ) {
+                    if (isSearchingTarget) {
+                        Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                            Box(
+                                modifier = Modifier
+                                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                                    .width(70.dp)
+                                    .height(10.dp)
+                                    .adaptiveSkeleton(RoundedCornerShape(4.dp))
+                            )
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalFadeEdge(24.dp)
+                            ) {
+                                items(7) {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        modifier = Modifier.width(76.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .padding(vertical = 4.dp)
+                                                .size(60.dp)
+                                                .adaptiveSkeleton(CircleShape)
+                                        )
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Box(
+                                            modifier = Modifier
+                                                .width(52.dp)
+                                                .height(11.dp)
+                                                .adaptiveSkeleton(RoundedCornerShape(4.dp))
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        AnimatedContent(
+                            targetState = activeType,
+                            transitionSpec = {
+                                val isForward = targetState.tabIndex() > initialState.tabIndex()
+                                (fadeIn(animationSpec = tween(220, easing = LinearOutSlowInEasing)) +
+                                        slideInHorizontally(animationSpec = tween(220, easing = FastOutSlowInEasing)) { if (isForward) it / 5 else -it / 5 })
+                                    .togetherWith(
+                                        fadeOut(animationSpec = tween(150, easing = FastOutLinearInEasing)) +
+                                                slideOutHorizontally(animationSpec = tween(180, easing = FastOutSlowInEasing)) { if (isForward) -it / 5 else it / 5 }
+                                    )
+                            },
+                            label = "stash_results_type_anim"
+                        ) { type ->
+                            if ((type == StashSearchType.ACTORS || type == StashSearchType.SEXMEX) && performerResults.isNotEmpty()) {
+                                Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                                    Text(
+                                        text = "Results : ${performerResults.size}",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            letterSpacing = 1.sp
+                                        ),
+                                        color = palette.textMuted,
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                                    )
+                                    LazyRow(
+                                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .horizontalFadeEdge(24.dp)
+                                    ) {
+                                        items(performerResults, key = { it.id }) { performer ->
+                                            val isSelected = selectedPerformer?.id == performer.id
+                                            HorizontalActorCircleItem(
+                                                performer = performer,
+                                                isSelected = isSelected,
+                                                onClick = { viewModel.selectStashPerformer(performer, settings.stashDbApiKey) }
+                                            )
+                                        }
+                                    }
+                                }
+                            } else if (type == StashSearchType.STUDIO && studioResults.isNotEmpty()) {
+                                Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                                    Text(
+                                        text = "Results : ${studioResults.size}",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            letterSpacing = 1.sp
+                                        ),
+                                        color = palette.textMuted,
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                                    )
+                                    LazyRow(
+                                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .horizontalFadeEdge(24.dp)
+                                    ) {
+                                        items(studioResults, key = { it.id }) { studio ->
+                                            val isSelected = selectedStudio?.id == studio.id
+                                            HorizontalStudioCircleItem(
+                                                studio = studio,
+                                                isSelected = isSelected,
+                                                onClick = { viewModel.selectStashStudio(studio, settings.stashDbApiKey) }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Main Content: 2-Cards-Per-Row Grid
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                ) {
+                    Crossfade(
+                        targetState = isLoadingScenes,
+                        animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing),
+                        label = "stash_scenes_loading_crossfade"
+                    ) { loading ->
+                        if (loading) {
+                            LazyVerticalGrid(
+                                columns = GridCells.Fixed(2),
+                                contentPadding = PaddingValues(10.dp),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier.fillMaxSize(),
+                                userScrollEnabled = false
+                            ) {
+                                items(6) {
+                                    StashGridSkeletonCard()
+                                }
+                            }
+                        } else if (scenesList.isNotEmpty()) {
+                            LazyVerticalGrid(
+                                columns = GridCells.Fixed(2),
+                                state = gridState,
+                                contentPadding = PaddingValues(10.dp),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .nestedScroll(nestedScrollConnection)
+                            ) {
+                                items(scenesList, key = { it.id }) { scene ->
+                                    val isSelected = selectedSceneIds.contains(scene.id)
+                                    val parsedDate = StashDbApiService.parseDateToMillis(scene.date)
+                                    val isAlreadySaved = (scene.id in savedStashDbIds) ||
+                                        Pair(scene.title.trim().lowercase(), parsedDate) in savedTitleAndDatePairs
+
+                                    StashGridPhotoCard(
+                                        scene = scene,
+                                        isSelected = isSelected,
+                                        isAlreadySaved = isAlreadySaved,
+                                        onToggleSelect = {
+                                            viewModel.toggleStashSceneSelection(scene.id)
+                                        },
+                                        onStudioClick = { id, name ->
+                                            studioToBlock = Pair(id, name)
+                                        }
+                                    )
+                                }
+
+                                if (isLoadingMore) {
+                                    item(span = { GridItemSpan(2) }) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 16.dp),
+                                            horizontalArrangement = Arrangement.Center,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            SmoothProgressIndicator(
+                                                color = accent,
+                                                modifier = Modifier.size(20.dp),
+                                                strokeWidth = 2.dp
+                                            )
+                                            Spacer(modifier = Modifier.width(10.dp))
+                                            Text(
+                                                text = "Loading more scenes...",
+                                                color = palette.textSecondary,
+                                                fontSize = 13.sp
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        } else if (searchQuery.isNotBlank() && !isSearchingTarget) {
+                            EmptyStateView(
+                                icon = Icons.Default.SearchOff,
+                                title = "No Scenes Available",
+                                subtitle = "Select another result from the top row or try a new search query."
+                            )
+                        } else {
+                            AnimatedContent(
+                                targetState = activeType,
+                                transitionSpec = {
+                                    val isForward = targetState.tabIndex() > initialState.tabIndex()
+                                    (fadeIn(animationSpec = tween(220, easing = LinearOutSlowInEasing)) +
+                                            slideInHorizontally(animationSpec = tween(220, easing = FastOutSlowInEasing)) { if (isForward) it / 6 else -it / 6 })
+                                        .togetherWith(
+                                            fadeOut(animationSpec = tween(150, easing = FastOutLinearInEasing)) +
+                                                    slideOutHorizontally(animationSpec = tween(180, easing = FastOutSlowInEasing)) { if (isForward) -it / 6 else it / 6 }
+                                        )
+                                },
+                                label = "stash_empty_state_anim"
+                            ) { type ->
+                                EmptyStateView(
+                                    icon = when (type) {
+                                        StashSearchType.ACTORS -> Icons.Outlined.Person
+                                        StashSearchType.STUDIO -> Icons.Outlined.Videocam
+                                        StashSearchType.SEXMEX -> Icons.Default.Language
+                                    },
+                                    title = when (type) {
+                                        StashSearchType.ACTORS -> "Search Actor & Explore Scenes"
+                                        StashSearchType.STUDIO -> "Search Studio & Explore Scenes"
+                                        StashSearchType.SEXMEX -> "Search SexMex Model or Scene"
+                                    },
+                                    subtitle = if (type == StashSearchType.SEXMEX) {
+                                        "Search for a performer or scene title, or explore the latest releases directly."
+                                    } else {
+                                        "Tap the search icon in the header, type a name or query, and tap search. Click any scene to select, then tap the checkmark in the header to save."
+                                    },
+                                    content = if (type == StashSearchType.SEXMEX) {
+                                        {
+                                            TextButton(
+                                                onClick = { viewModel.exploreLatestSexMex() },
+                                                shape = RoundedCornerShape(8.dp),
+                                                modifier = Modifier.testTag("sexmex_explore_button")
+                                            ) {
+                                                Text(
+                                                    text = "Explore",
+                                                    style = MaterialTheme.typography.titleSmall.copy(
+                                                        fontWeight = FontWeight.Bold,
+                                                        letterSpacing = 0.5.sp
+                                                    ),
+                                                    color = accent
+                                                )
+                                            }
+                                        }
+                                    } else null
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Adaptive Skeleton Modifier tuned for Dark, AMOLED, and Light themes
+ */
+@Composable
+fun Modifier.adaptiveSkeleton(
+    shape: Shape = RoundedCornerShape(8.dp)
+): Modifier {
+    val palette = LocalVaultPalette.current
+    val transition = rememberInfiniteTransition(label = "adaptive_skeleton_anim")
+    val alpha by transition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 0.85f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 750, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "skeleton_alpha"
+    )
+    return this
+        .clip(shape)
+        .background(palette.skeletonBg.copy(alpha = alpha))
+}
+
+/**
+ * Circular Item for Actor displayed in the horizontal row (Circle on top, Name below)
+ */
+@Composable
+fun HorizontalActorCircleItem(
+    performer: StashPerformer,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    val palette = LocalVaultPalette.current
+    val accent = LocalAccentColor.current
+
+    val circleScale by animateFloatAsState(
+        targetValue = if (isSelected) 1.08f else 1.0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "actor_circle_scale"
+    )
+
+    val isBetaTest = LocalBetaTestPrivacy.current
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .width(76.dp)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
+            .testTag("stash_actor_${performer.id}")
+    ) {
+        Box(
+            modifier = Modifier
+                .padding(vertical = 4.dp)
+                .size(60.dp)
+                .graphicsLayer {
+                    scaleX = circleScale
+                    scaleY = circleScale
+                }
+                .border(
+                    BorderStroke(
+                        if (isSelected) 2.5.dp else 1.2.dp,
+                        if (isSelected) accent else palette.border.copy(alpha = 0.6f)
+                    ),
+                    CircleShape
+                )
+                .clip(CircleShape)
+                .background(palette.cardBg),
+            contentAlignment = Alignment.Center
+        ) {
+            if (!performer.imageUrl.isNullOrBlank()) {
+                AsyncImage(
+                    model = performer.imageUrl,
+                    contentDescription = performer.name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .privacyImageBlur(isBetaTest)
+                )
+                if (isBetaTest) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.75f))
+                    )
+                }
+            } else {
+                Icon(
+                    imageVector = Icons.Default.Person,
+                    contentDescription = null,
+                    tint = palette.textMuted,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(5.dp))
+
+        Text(
+            text = performer.name,
+            fontSize = 11.sp,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+            color = if (isSelected) accent else palette.textPrimary,
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            lineHeight = 14.sp,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+/**
+ * Circular Item for Studio displayed in the horizontal row (Circle on top, Name below)
+ * Displays StashDB studio PNG logos on a solid AMOLED dark background (Color(0xFF0F0F12))
+ * for seamless integration as a unified image.
+ */
+@Composable
+fun HorizontalStudioCircleItem(
+    studio: StashStudio,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    val palette = LocalVaultPalette.current
+    val accent = LocalAccentColor.current
+
+    val circleScale by animateFloatAsState(
+        targetValue = if (isSelected) 1.08f else 1.0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "studio_circle_scale"
+    )
+
+    val context = LocalContext.current
+    val formattedLogoUrl = remember(studio.logoUrl) {
+        studio.logoUrl?.trim()?.replace("http://", "https://")
+    }
+
+    val imageRequest = remember(formattedLogoUrl) {
+        if (!formattedLogoUrl.isNullOrBlank()) {
+            ImageRequest.Builder(context)
+                .data(formattedLogoUrl)
+                .crossfade(true)
+                .build()
+        } else null
+    }
+
+    // Dark AMOLED background specifically designed for transparent Studio PNG logos
+    // BG-FIX: PNG logos are designed for dark backgrounds
+    val studioLogoBg = if (MaterialTheme.colorScheme.background.luminance() > 0.5f)
+        StudioLogoBgLight else StudioLogoBgDark
+
+    val isBetaTest = LocalBetaTestPrivacy.current
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .width(76.dp)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
+            .testTag("stash_studio_${studio.id}")
+    ) {
+        Box(
+            modifier = Modifier
+                .padding(vertical = 4.dp)
+                .size(60.dp)
+                .graphicsLayer {
+                    scaleX = circleScale
+                    scaleY = circleScale
+                }
+                .border(
+                    BorderStroke(
+                        if (isSelected) 2.5.dp else 1.2.dp,
+                        if (isSelected) accent else palette.border.copy(alpha = 0.6f)
+                    ),
+                    CircleShape
+                )
+                .clip(CircleShape)
+                .background(studioLogoBg), // BG-FIX
+            contentAlignment = Alignment.Center
+        ) {
+            if (imageRequest != null) {
+                var isImageError by remember(formattedLogoUrl) { mutableStateOf(false) }
+                if (!isImageError) {
+                    AsyncImage(
+                        model = imageRequest,
+                        contentDescription = studio.name,
+                        contentScale = ContentScale.Fit,
+                        onError = { isImageError = true },
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(8.dp)
+                            .privacyImageBlur(isBetaTest)
+                    )
+                    if (isBetaTest) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.75f))
+                        )
+                    }
+                } else {
+                    StudioFallbackEmblem(name = studio.name, accentColor = accent)
+                }
+            } else {
+                StudioFallbackEmblem(name = studio.name, accentColor = accent)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(5.dp))
+
+        Text(
+            text = studio.name,
+            fontSize = 11.sp,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+            color = if (isSelected) accent else palette.textPrimary,
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            lineHeight = 14.sp,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+/**
+ * 1:1 Pixel-Matched Skeleton Card for StashDB Scene Grid:
+ * - Exact 16:9 Cover Skeleton
+ * - Exact padding, spacing, line heights, divider, and icon dimensions
+ * - Eliminates Layout Shift / jump when real cards load
+ */
+@Composable
+fun StashGridSkeletonCard(
+    modifier: Modifier = Modifier
+) {
+    val palette = LocalVaultPalette.current
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = palette.cardBg),
+        border = null
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // 1. Exact 16:9 Cover Skeleton
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(16f / 9f)
+                    .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+                    .adaptiveSkeleton(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+            )
+            // 2. Exact Title & metadata skeleton container matching StashGridPhotoCard pixel-for-pixel
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        color = palette.cardBg,
+                        shape = RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp)
+                    )
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                // Title (Exact 18dp height matching 18sp line-height)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(0.85f)
+                        .height(18.dp)
+                        .adaptiveSkeleton(RoundedCornerShape(4.dp))
+                )
+                // Divider line below title (Exact 0.5dp thickness with 1dp vertical padding)
+                HorizontalDivider(
+                    color = palette.border.copy(alpha = 0.35f),
+                    thickness = 0.5.dp,
+                    modifier = Modifier.padding(vertical = 1.dp)
+                )
+                // Row 1: Actor Icon (13.5dp) + Actor text placeholder (15dp height)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Box(modifier = Modifier.size(13.5.dp).adaptiveSkeleton(CircleShape))
+                    Box(modifier = Modifier.fillMaxWidth(0.65f).height(15.dp).adaptiveSkeleton(RoundedCornerShape(3.dp)))
+                }
+                // Row 2: Studio Icon (13.5dp) + Studio text placeholder (15dp height + 1dp vertical padding)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 1.dp)
+                ) {
+                    Box(modifier = Modifier.size(13.5.dp).adaptiveSkeleton(CircleShape))
+                    Box(modifier = Modifier.fillMaxWidth(0.48f).height(15.dp).adaptiveSkeleton(RoundedCornerShape(3.dp)))
+                }
+                // Row 3: Calendar Icon (13.5dp) + Date text placeholder (15dp height)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Box(modifier = Modifier.size(13.5.dp).adaptiveSkeleton(CircleShape))
+                    Box(modifier = Modifier.fillMaxWidth(0.35f).height(15.dp).adaptiveSkeleton(RoundedCornerShape(3.dp)))
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 2-Cards-Per-Row Scene Card matching the exact screenshot layout:
+ * - Smooth entrance slide-up + fade-in animation
+ * - Rounded corners (16.dp)
+ * - Cover image (16:9)
+ * - Dimmed/desaturated image with circular check badge when selected
+ * - Bold title (1 line with ellipsis)
+ * - Subtle divider
+ * - 3 metadata rows with outlined icons (Person, Studio Logo/Videocam, CalendarToday)
+ */
+@Composable
+fun StashGridPhotoCard(
+    scene: StashScene,
+    isSelected: Boolean,
+    isAlreadySaved: Boolean = false,
+    onToggleSelect: () -> Unit,
+    onStudioClick: (studioId: String?, studioName: String) -> Unit = { _, _ -> }
+) {
+    val palette = LocalVaultPalette.current
+    val accent = LocalAccentColor.current
+    val context = LocalContext.current
+    val uPath = remember { Path() }
+
+    val grayscaleFilter = remember {
+        ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0.0f) })
+    }
+
+    // Smooth, lightweight crossfade + subtle scale entrance animation seamlessly replacing skeleton
+    var isCardVisible by remember(scene.id) { mutableStateOf(false) }
+    LaunchedEffect(scene.id) {
+        isCardVisible = true
+    }
+
+    val animatedCardAlpha by animateFloatAsState(
+        targetValue = if (isCardVisible) (if (isAlreadySaved && !isSelected) 0.65f else 1.0f) else 0f,
+        animationSpec = tween(durationMillis = 220, easing = LinearOutSlowInEasing),
+        label = "card_entrance_alpha"
+    )
+
+    val animatedCardScale by animateFloatAsState(
+        targetValue = if (isCardVisible) (if (isSelected) 0.978f else 1.0f) else 0.98f,
+        animationSpec = tween(durationMillis = 220, easing = LinearOutSlowInEasing),
+        label = "card_entrance_scale"
+    )
+
+    val selectionProgress by animateFloatAsState(
+        targetValue = if (isSelected) 1.0f else 0.0f,
+        animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
+        label = "card_select_progress"
+    )
+
+    val isBetaTest = LocalBetaTestPrivacy.current
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .graphicsLayer {
+                alpha = animatedCardAlpha
+                scaleX = animatedCardScale
+                scaleY = animatedCardScale
+            }
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onToggleSelect
+            )
+            .testTag("stash_scene_${scene.id}"),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = palette.cardBg), // BG-FIX
+        border = null
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // 1. Cover Image Box: Fixed 16:9 aspect ratio with adaptiveSkeleton placeholder
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(16f / 9f)
+                    .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+                    .adaptiveSkeleton(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                if (!scene.coverUrl.isNullOrBlank()) {
+                    val imageRequest = remember(scene.coverUrl) {
+                        ImageRequest.Builder(context)
+                            .data(scene.coverUrl)
+                            .crossfade(true)
+                            .crossfade(300)
+                            .build()
+                    }
+                    AsyncImage(
+                        model = imageRequest,
+                        contentDescription = scene.title,
+                        contentScale = ContentScale.Crop,
+                        colorFilter = if (isAlreadySaved) grayscaleFilter else null,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .privacyImageBlur(isBetaTest)
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.Movie,
+                        contentDescription = null,
+                        tint = palette.textMuted,
+                        modifier = Modifier.size(40.dp)
+                    )
+                }
+
+                if (isBetaTest && !scene.coverUrl.isNullOrBlank()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.75f))
+                    )
+                }
+
+                // Smooth lightweight dimmed overlay on selection or saved
+                val overlayAlpha = if (isSelected) 0.32f else if (isAlreadySaved) 0.18f else 0.0f
+                if (overlayAlpha > 0f) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = overlayAlpha))
+                    )
+                }
+
+                // Circular Check badge in top right for selected scenes (smooth, fast & light)
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp)
+                ) {
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = isSelected,
+                        enter = fadeIn(animationSpec = tween(160)) + scaleIn(
+                            animationSpec = tween(180, easing = FastOutSlowInEasing),
+                            initialScale = 0.6f
+                        ),
+                        exit = fadeOut(animationSpec = tween(120)) + scaleOut(
+                            animationSpec = tween(120, easing = FastOutSlowInEasing),
+                            targetScale = 0.6f
+                        )
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = accent,
+                            shadowElevation = 3.dp,
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = "Selected",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 2. Card Content: Custom U-shape border with smooth animated progress
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        color = palette.cardBg, // BG-FIX
+                        shape = RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp)
+                    )
+                    .drawBehind {
+                        if (selectionProgress > 0.05f) {
+                            val cornerRadiusPx = 16.dp.toPx()
+                            val strokeWidth = (0.6f + 1.4f * selectionProgress).dp.toPx()
+                            val halfStroke = strokeWidth / 2f
+
+                            uPath.reset()
+                            uPath.moveTo(halfStroke, 0f)
+                            uPath.lineTo(halfStroke, size.height - cornerRadiusPx)
+                            uPath.arcTo(
+                                rect = Rect(
+                                    left = halfStroke,
+                                    top = size.height - 2 * cornerRadiusPx + halfStroke,
+                                    right = 2 * cornerRadiusPx - halfStroke,
+                                    bottom = size.height - halfStroke
+                                ),
+                                startAngleDegrees = 180f,
+                                sweepAngleDegrees = -90f,
+                                forceMoveTo = false
+                            )
+                            uPath.lineTo(size.width - cornerRadiusPx, size.height - halfStroke)
+                            uPath.arcTo(
+                                rect = Rect(
+                                    left = size.width - 2 * cornerRadiusPx + halfStroke,
+                                    top = size.height - 2 * cornerRadiusPx + halfStroke,
+                                    right = size.width - halfStroke,
+                                    bottom = size.height - halfStroke
+                                ),
+                                startAngleDegrees = 90f,
+                                sweepAngleDegrees = -90f,
+                                forceMoveTo = false
+                            )
+                            uPath.lineTo(size.width - halfStroke, 0f)
+
+                            val borderBrush = Brush.verticalGradient(
+                                0.0f to accent.copy(alpha = 0.12f * selectionProgress),
+                                0.45f to accent.copy(alpha = 0.65f * selectionProgress),
+                                1.0f to accent.copy(alpha = selectionProgress),
+                                startY = 0f,
+                                endY = size.height
+                            )
+
+                            drawPath(
+                                path = uPath,
+                                brush = borderBrush,
+                                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                            )
+                        }
+                    }
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                // Title (Bold, 1 line with ellipsis and fixed 18sp line-height)
+                Text(
+                    text = scene.title,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.5.sp,
+                        lineHeight = 18.sp
+                    ),
+                    color = palette.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                // Divider line below title
+                HorizontalDivider(
+                    color = palette.border.copy(alpha = 0.35f),
+                    thickness = 0.5.dp,
+                    modifier = Modifier.padding(vertical = 1.dp)
+                )
+
+                // Row 1: Actor Icon + Actors
+                val actorText = if (scene.femalePerformers.isNotEmpty()) {
+                    scene.femalePerformers.joinToString(", ") { it.name }
+                } else {
+                    "No Performers Listed"
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_nav_actor),
+                        contentDescription = null,
+                        tint = palette.textSecondary,
+                        modifier = Modifier.size(13.5.dp)
+                    )
+                    Text(
+                        text = actorText,
+                        fontSize = 10.5.sp,
+                        lineHeight = 15.sp,
+                        color = palette.textSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                // Row 2: Studio Icon + Studio Name (Clickable to Block Studio)
+                val studioText = scene.studioName ?: "Studio"
+                val hasStudio = !scene.studioName.isNullOrBlank()
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(4.dp))
+                        .clickable(enabled = hasStudio) {
+                            onStudioClick(scene.studioId, scene.studioName ?: "")
+                        }
+                        .padding(vertical = 1.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_nav_studio),
+                        contentDescription = null,
+                        tint = palette.textSecondary,
+                        modifier = Modifier.size(13.5.dp)
+                    )
+                    Text(
+                        text = studioText,
+                        fontSize = 10.5.sp,
+                        lineHeight = 15.sp,
+                        color = palette.textSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                // Row 3: Calendar Icon + Date
+                val dateText = scene.date ?: "No date"
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_calendar_event),
+                        contentDescription = null,
+                        tint = palette.textSecondary,
+                        modifier = Modifier.size(13.5.dp)
+                    )
+                    Text(
+                        text = dateText,
+                        fontSize = 10.5.sp,
+                        lineHeight = 15.sp,
+                        color = palette.textSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun EmptyStateView(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    content: (@Composable () -> Unit)? = null
+) {
+    val palette = LocalVaultPalette.current
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = palette.textMuted.copy(alpha = 0.5f),
+            modifier = Modifier.size(54.dp)
+        )
+        Spacer(modifier = Modifier.height(14.dp))
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+            color = palette.textPrimary,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = subtitle,
+            style = MaterialTheme.typography.bodySmall,
+            color = palette.textSecondary,
+            textAlign = TextAlign.Center
+        )
+        if (content != null) {
+            Spacer(modifier = Modifier.height(16.dp))
+            content()
+        }
+    }
+}
+
+/**
+ * Fallback emblem for studios when logo URL is missing or fails to load.
+ * Displays stylized studio initials on a dark AMOLED gradient.
+ */
+@Composable
+private fun StudioFallbackEmblem(name: String, accentColor: Color) {
+    // BG-FIX: PNG logos are designed for dark backgrounds
+    val studioLogoBg = if (MaterialTheme.colorScheme.background.luminance() > 0.5f)
+        StudioLogoBgLight else StudioLogoBgDark
+
+    val initials = name.trim().split(" ", "-", "_")
+        .take(2)
+        .mapNotNull { it.firstOrNull()?.uppercaseChar() }
+        .joinToString("")
+        .ifBlank { "S" }
+
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.radialGradient(
+                    colors = listOf(accentColor.copy(alpha = 0.35f), studioLogoBg) // BG-FIX
+                )
+            )
+    ) {
+        Text(
+            text = initials,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.ExtraBold,
+            color = Color.White,
+            letterSpacing = 0.5.sp
+        )
+    }
+}
+
+/**
+ * Lightweight, GPU-accelerated horizontal fade mask for smooth gradient edge aesthetic.
+ */
+private fun Modifier.horizontalFadeEdge(fadeWidth: Dp = 24.dp): Modifier = this.then(
+    Modifier
+        .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+        .drawWithContent {
+            drawContent()
+            val fadePx = fadeWidth.toPx()
+            if (size.width > fadePx * 2 && fadePx > 0f) {
+                val leftFraction = (fadePx / size.width).coerceIn(0f, 0.49f)
+                val rightFraction = 1f - leftFraction
+                drawRect(
+                    brush = Brush.horizontalGradient(
+                        0f to Color.Transparent,
+                        leftFraction to Color.Black,
+                        rightFraction to Color.Black,
+                        1f to Color.Transparent
+                    ),
+                    blendMode = BlendMode.DstIn
+                )
+            }
+        }
+)
+
+private fun StashSearchType.tabIndex(): Int = when (this) {
+    StashSearchType.ACTORS -> 0
+    StashSearchType.STUDIO -> 1
+    StashSearchType.SEXMEX -> 2
+}
+

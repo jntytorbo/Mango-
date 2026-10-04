@@ -1,0 +1,887 @@
+package com.example.ui.components
+
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.BiasAlignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.BlurredEdgeTreatment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import androidx.compose.ui.res.painterResource
+import com.example.R
+import com.example.data.local.entity.ActorEntity
+import com.example.data.local.entity.LinkEntity
+import com.example.ui.ActiveInlineVideoPlayback
+import com.example.ui.theme.LocalAccentColor
+import com.example.ui.theme.LocalBetaTestPrivacy
+import com.example.ui.theme.LocalVaultPalette
+import com.example.ui.theme.VaultScrims
+import com.example.ui.theme.privacyImageBlur
+import java.text.SimpleDateFormat
+import java.util.*
+import kotlinx.coroutines.launch
+
+private enum class CardActionMenuState {
+    CLOSED,
+    MAIN_MENU,
+    QUALITY_MENU,
+    DELETE_CONFIRM,
+    ACTORS_MENU
+}
+
+@Composable
+fun LinkCard(
+    link: LinkEntity,
+    actorsMap: Map<String, String> = emptyMap(),
+    studiosMap: Map<String, String> = emptyMap(),
+    fullActorsMap: Map<String, ActorEntity> = emptyMap(),
+    preferredActorId: String? = null,
+    isBookmarked: Boolean = false,
+    isActiveCard: Boolean = false,
+    onActivate: () -> Unit = {},
+    onDismissActive: () -> Unit = {},
+    onToggleBookmark: () -> Unit = {},
+    onPlay: (url: String) -> Unit,
+    onOpenGallery: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    onActorClick: (actorId: String) -> Unit = {},
+    onStudioClick: (studioId: String) -> Unit = {},
+    resolvingStatus: String? = null,
+    isResolvingThisCard: Boolean = false,
+    resolutionError: String? = null,
+    onDismissResolutionError: () -> Unit = {},
+    inlinePlayback: ActiveInlineVideoPlayback? = null,
+    onCloseInlineVideo: () -> Unit = {},
+    onFullscreenInlineVideo: (positionMs: Long) -> Unit = {},
+    onFullscreenInlineVideoWithMode: ((positionMs: Long, startInLandscape: Boolean) -> Unit)? = null,
+    onEnterPipInlineVideo: ((positionMs: Long) -> Unit)? = null,
+    exoPlayer: androidx.media3.exoplayer.ExoPlayer? = null,
+    enableVideoPlayerGestures: Boolean = true,
+    onImageError: (() -> Unit)? = null,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val palette = LocalVaultPalette.current
+    val accent = LocalAccentColor.current
+    val haptic = LocalHapticFeedback.current
+
+    // Internal Submenu state while active
+    var subMenuState by remember { mutableStateOf<CardActionMenuState?>(null) }
+    var selectedSource by remember { mutableStateOf<Source?>(null) }
+    var showAllActorsPopup by remember { mutableStateOf(false) }
+
+    val currentMenuState = when {
+        !isActiveCard -> CardActionMenuState.CLOSED
+        subMenuState != null -> subMenuState!!
+        else -> CardActionMenuState.MAIN_MENU
+    }
+    val isOverlayActive = currentMenuState != CardActionMenuState.CLOSED
+
+    var lastOpenMenuState by remember { mutableStateOf(CardActionMenuState.MAIN_MENU) }
+    // 7) Side Effect Fix: update lastOpenMenuState in LaunchedEffect instead of direct assignment
+    LaunchedEffect(currentMenuState) {
+        if (currentMenuState != CardActionMenuState.CLOSED) {
+            lastOpenMenuState = currentMenuState
+        }
+    }
+
+    var lastClickTime by remember { mutableLongStateOf(0L) }
+    fun debouncedClick(action: () -> Unit) {
+        val now = System.currentTimeMillis()
+        if (now - lastClickTime >= 150L) {
+            lastClickTime = now
+            action()
+        }
+    }
+
+    // 4) Lightweight, snappy overlay animation with zero processing overhead
+    val menuProgress by animateFloatAsState(
+        targetValue = if (isOverlayActive) 1f else 0f,
+        animationSpec = tween(durationMillis = 160, easing = FastOutSlowInEasing),
+        label = "menu_progress"
+    )
+
+    val isOverlayVisible by remember {
+        derivedStateOf { menuProgress > 0.001f }
+    }
+
+    // Close when dismissed from outside
+    LaunchedEffect(isActiveCard) {
+        if (!isActiveCard) {
+            subMenuState = null
+            selectedSource = null
+            lastOpenMenuState = CardActionMenuState.MAIN_MENU
+        }
+    }
+
+    fun handleCoverTap() {
+        debouncedClick {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+
+            if (isOverlayActive) {
+                subMenuState = null
+                onDismissActive()
+            } else {
+                subMenuState = CardActionMenuState.MAIN_MENU
+                onActivate()
+            }
+        }
+    }
+
+    // 8) Unified Back and Scrim behavior for all submenus (returns to MAIN_MENU)
+    fun handleScrimTap() {
+        debouncedClick {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            
+            if (currentMenuState != CardActionMenuState.MAIN_MENU && currentMenuState != CardActionMenuState.CLOSED) {
+                subMenuState = CardActionMenuState.MAIN_MENU
+            } else {
+                subMenuState = null
+                onDismissActive()
+            }
+        }
+    }
+
+    // Handle System Back button when overlay is open (returns to MAIN_MENU from submenus, or closes)
+    BackHandler(enabled = isOverlayActive) {
+        if (currentMenuState != CardActionMenuState.MAIN_MENU && currentMenuState != CardActionMenuState.CLOSED) {
+            subMenuState = CardActionMenuState.MAIN_MENU
+        } else {
+            subMenuState = null
+            onDismissActive()
+        }
+    }
+
+    val studioName = remember(link.studioIds, studiosMap) {
+        if (link.studioIds.isEmpty()) {
+            ""
+        } else {
+            val firstId = link.studioIds.first()
+            studiosMap[firstId] ?: firstId
+        }
+    }
+
+    // Formatted date
+    val displayDate = remember(link.createdAt, link.assignedDate) {
+        val ts = link.assignedDate ?: link.createdAt
+        formatDisplayDate(ts)
+    }
+
+    // Unified URL Handler: Play in App player if video streamable or hoster/debrid, otherwise launch browser
+    fun handleUrlSelection(url: String?) {
+        if (!url.isNullOrBlank()) {
+            val trimmed = url.trim()
+            val ext = com.example.network.MediaUrlValidator.mediaExtensionOf(trimmed)
+            if (ext in listOf("mp4", "m3u8", "mkv", "webm", "mpd") ||
+                trimmed.contains("/dash/", ignoreCase = true) ||
+                trimmed.startsWith("http://", ignoreCase = true) ||
+                trimmed.startsWith("https://", ignoreCase = true)
+            ) {
+                onPlay(trimmed)
+            } else {
+                try {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(trimmed))
+                    context.startActivity(intent)
+                } catch (e: Exception) {
+                    Toast.makeText(context, "Could not open URL: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        } else {
+            Toast.makeText(context, "No URL specified for this quality", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // Magnet handler (Stream / Download in app)
+    fun handleMagnet(magnetUri: String?) {
+        if (!magnetUri.isNullOrBlank()) {
+            onPlay(magnetUri)
+        } else {
+            Toast.makeText(context, "No Magnet link specified for this quality", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val hasUrlHD = !link.urlHD.isNullOrBlank()
+    val hasUrl4K = !link.url4K.isNullOrBlank()
+    val hasAnyUrl = hasUrlHD || hasUrl4K
+
+    val hasMagnetHD = !link.magnet.isNullOrBlank()
+    val hasMagnet4K = !link.magnet4K.isNullOrBlank()
+    val hasAnyMagnet = hasMagnetHD || hasMagnet4K
+
+    // Native Smooth Cover Reveal Animation State
+    var isImageLoaded by remember(link.coverImage) { mutableStateOf(false) }
+
+    val coverAlpha by animateFloatAsState(
+        targetValue = if (isImageLoaded) 1f else 0f,
+        animationSpec = tween(durationMillis = 320, easing = FastOutSlowInEasing),
+        label = "cover_reveal_alpha"
+    )
+
+    val coverScale by animateFloatAsState(
+        targetValue = if (isOverlayActive) 1.06f else 1.0f,
+        animationSpec = tween(durationMillis = 520, easing = FastOutSlowInEasing),
+        label = "cover_scale"
+    )
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("scene_card_${link.id}")
+    ) {
+        // ========================================================
+        // 1. Edge-to-Edge 16:9 Thumbnail or Inline Video Player
+        // ========================================================
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(16f / 9f)
+                .background(if (isResolvingThisCard) palette.surface else palette.cardBg)
+                .clipToBounds()
+                .then(
+                    if (inlinePlayback == null) {
+                        Modifier.clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) {
+                            handleCoverTap()
+                        }
+                    } else {
+                        Modifier
+                    }
+                )
+        ) {
+            if (inlinePlayback != null) {
+                // Embedded 16:9 Native Video Player
+                InlineCardPlayer(
+                    title = inlinePlayback.title,
+                    qualities = inlinePlayback.qualities,
+                    subtitles = inlinePlayback.subtitles,
+                    defaultHeaders = inlinePlayback.headers,
+                    exoPlayer = exoPlayer,
+                    enableGestures = enableVideoPlayerGestures,
+                    onClose = onCloseInlineVideo,
+                    onFullscreen = onFullscreenInlineVideo,
+                    onFullscreenWithMode = onFullscreenInlineVideoWithMode,
+                    onEnterPip = onEnterPipInlineVideo,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                // Background Image with hardware layer acceleration and native reveal transition
+                Box(
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                // Native Clean Skeleton Loading Shimmer while image is loading or before it appears
+                if (!isImageLoaded && link.coverImage.isNotEmpty()) {
+                    val shimmerBrush = ShimmerBrush(targetValue = 900f)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(palette.skeletonBg) // BG-FIX
+                            .background(palette.cardBg) // BG-FIX
+                            .background(shimmerBrush)
+                    )
+                }
+
+                val isBetaTest = LocalBetaTestPrivacy.current
+                val blurRadius = (menuProgress * 8f).dp
+
+                if (link.coverImage.isNotEmpty()) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(context)
+                            .data(link.coverImage)
+                            .crossfade(true)
+                            .crossfade(280)
+                            .build(),
+                        contentDescription = link.title,
+                        contentScale = ContentScale.Crop,
+                        onSuccess = { isImageLoaded = true },
+                        onError = {
+                            isImageLoaded = true
+                            onImageError?.invoke()
+                        },
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .privacyImageBlur(isBetaTest)
+                            .then(
+                                if (menuProgress > 0.01f) {
+                                    Modifier.blur(radius = blurRadius, edgeTreatment = BlurredEdgeTreatment.Rectangle)
+                                } else Modifier
+                            )
+                            .graphicsLayer {
+                                alpha = coverAlpha
+                                scaleX = coverScale
+                                scaleY = coverScale
+                            }
+                    )
+                    if (isBetaTest) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.28f))
+                        )
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Image,
+                            contentDescription = "No Cover Image",
+                            tint = palette.textSecondary.copy(alpha = 0.35f),
+                            modifier = Modifier.size(48.dp)
+                        )
+                    }
+                }
+            }
+
+            // Smooth Scrim Layer driven directly by menuProgress (Zero extra animation loops)
+            if (menuProgress > 0.001f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { alpha = menuProgress }
+                        .background(VaultScrims.Overlay) // BG-FIX
+                        .clickable(
+                            enabled = isOverlayActive,
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) {
+                            handleScrimTap()
+                        }
+                )
+            }
+
+            // Simple, lightweight action buttons overlay
+            if (isOverlayVisible) {
+                CompositionLocalProvider(
+                    LocalActionsInteractive provides isOverlayActive
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .align(Alignment.Center)
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        AnimatedContent(
+                            targetState = if (isOverlayActive) currentMenuState else lastOpenMenuState,
+                            transitionSpec = {
+                                // Pure smooth crossfade when switching between submenus to prevent container double-scaling distortion
+                                fadeIn(animationSpec = tween(220, easing = LinearOutSlowInEasing)) togetherWith
+                                        fadeOut(animationSpec = tween(180, easing = FastOutLinearInEasing))
+                            },
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.fillMaxWidth(),
+                            label = "simple_action_menu"
+                        ) { state ->
+                            when (state) {
+                                CardActionMenuState.CLOSED -> {
+                                    Spacer(modifier = Modifier.size(0.dp))
+                                }
+
+                                CardActionMenuState.MAIN_MENU -> {
+                        MainActionMenu(
+                            onMagnetClick = {
+                                selectedSource = Source.MAGNET
+                                subMenuState = CardActionMenuState.QUALITY_MENU
+                            },
+                            onUrlClick = {
+                                selectedSource = Source.URL
+                                subMenuState = CardActionMenuState.QUALITY_MENU
+                            },
+                            onSave = {
+                                onToggleBookmark()
+                            },
+                            isSaved = isBookmarked,
+                            onEdit = {
+                                onDismissActive()
+                                onEdit()
+                            },
+                            onDelete = {
+                                subMenuState = CardActionMenuState.DELETE_CONFIRM
+                            },
+                            showMagnet = hasAnyMagnet,
+                            showUrl = hasAnyUrl,
+                            isExpanded = isOverlayActive
+                        )
+                    }
+
+                    CardActionMenuState.QUALITY_MENU -> {
+                        val hasHD = if (selectedSource == Source.MAGNET) {
+                            !link.magnet.isNullOrBlank() || !link.torrentUrlHD.isNullOrBlank()
+                        } else {
+                            !link.urlHD.isNullOrBlank()
+                        }
+                        val has4K = if (selectedSource == Source.MAGNET) {
+                            !link.magnet4K.isNullOrBlank() || !link.torrentUrl4K.isNullOrBlank()
+                        } else {
+                            !link.url4K.isNullOrBlank()
+                        }
+
+                        QualitySelectMenu(
+                            hasHD = hasHD,
+                            has4K = has4K,
+                            onSelectHD = {
+                                onDismissActive()
+                                if (selectedSource == Source.MAGNET) {
+                                    handleMagnet(link.magnet)
+                                } else {
+                                    handleUrlSelection(link.urlHD)
+                                }
+                            },
+                            onSelect4K = {
+                                onDismissActive()
+                                if (selectedSource == Source.MAGNET) {
+                                    handleMagnet(link.magnet4K)
+                                } else {
+                                    handleUrlSelection(link.url4K)
+                                }
+                            },
+                            isExpanded = isOverlayActive
+                        )
+                    }
+
+                    CardActionMenuState.DELETE_CONFIRM -> {
+                        DeleteConfirmMenu(
+                            onCancel = {
+                                subMenuState = CardActionMenuState.MAIN_MENU
+                            },
+                            onConfirm = {
+                                onDismissActive()
+                                onDelete()
+                            },
+                            isExpanded = isOverlayActive
+                        )
+                    }
+
+                    CardActionMenuState.ACTORS_MENU -> {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState())
+                                .padding(horizontal = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // All actors list with LinkCard.tsx staggered spring scale/translateY
+                            link.actorIds.forEachIndexed { idx, actorId ->
+                                val actorEntity = fullActorsMap[actorId] ?: fullActorsMap[actorId.trim().lowercase()]
+                                val actorName = actorsMap[actorId] ?: actorEntity?.name ?: actorId
+                                val actorImg = actorEntity?.imageUrl ?: ""
+                                val actorZoom = actorEntity?.imageZoom ?: 1.0f
+                                val actorPosX = actorEntity?.imagePositionX ?: 50f
+                                val actorPosY = actorEntity?.imagePositionY ?: 50f
+                                val realActorId = actorEntity?.id ?: actorId
+
+                                val totalActorsCount = link.actorIds.size
+                                var isActorExpanded by remember { mutableStateOf(false) }
+
+                                LaunchedEffect(isOverlayActive) {
+                                    if (isOverlayActive) {
+                                        val delayMs = (idx * 45L)
+                                        if (delayMs > 0) kotlinx.coroutines.delay(delayMs)
+                                        isActorExpanded = true
+                                    } else {
+                                        val delayMs = (((totalActorsCount - 1 - idx).coerceAtLeast(0)) * 35L)
+                                        if (delayMs > 0) kotlinx.coroutines.delay(delayMs)
+                                        isActorExpanded = false
+                                    }
+                                }
+
+                                val entranceScale by animateFloatAsState(
+                                    targetValue = if (isActorExpanded) 1f else 0.15f,
+                                    animationSpec = if (isActorExpanded) {
+                                        spring(
+                                            dampingRatio = 0.58f,
+                                            stiffness = Spring.StiffnessLow
+                                        )
+                                    } else {
+                                        tween(durationMillis = 200, easing = FastOutLinearInEasing)
+                                    },
+                                    label = "actor_scale"
+                                )
+                                val alphaState by animateFloatAsState(
+                                    targetValue = if (isActorExpanded) 1f else 0f,
+                                    animationSpec = if (isActorExpanded) {
+                                        tween(durationMillis = 300, easing = LinearOutSlowInEasing)
+                                    } else {
+                                        tween(durationMillis = 180, easing = FastOutLinearInEasing)
+                                    },
+                                    label = "actor_alpha"
+                                )
+
+                                 Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier
+                                        .graphicsLayer {
+                                            scaleX = entranceScale
+                                            scaleY = entranceScale
+                                            alpha = alphaState
+                                        }
+                                        .padding(horizontal = 4.dp)
+                                        .width(72.dp)
+                                        .clip(RectangleShape)
+                                        .clickable(enabled = isOverlayActive && alphaState > 0.3f) {
+                                            debouncedClick {
+                                                subMenuState = null
+                                                onDismissActive()
+                                                onActorClick(realActorId)
+                                            }
+                                        }
+                                        .padding(vertical = 4.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(54.dp)
+                                            .clip(CircleShape)
+                                            .background(palette.surface),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (actorImg.isNotEmpty()) {
+                                            val z = actorZoom.coerceIn(1f, 3f)
+                                            val biasX = (actorPosX.coerceIn(0f, 100f) - 50f) / 50f
+                                            val biasY = (actorPosY.coerceIn(0f, 100f) - 50f) / 50f
+                                            AsyncImage(
+                                                model = actorImg,
+                                                contentDescription = actorName,
+                                                contentScale = ContentScale.Crop,
+                                                alignment = BiasAlignment(biasX, biasY),
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .graphicsLayer {
+                                                        val maxX = size.width * (z - 1f) / 2f
+                                                        val maxY = size.height * (z - 1f) / 2f
+                                                        scaleX = z
+                                                        scaleY = z
+                                                        translationX = -biasX * maxX
+                                                        translationY = -biasY * maxY
+                                                    }
+                                            )
+                                        } else {
+                                            Icon(
+                                                painter = painterResource(id = R.drawable.ic_nav_actor),
+                                                contentDescription = null,
+                                                tint = palette.textSecondary.copy(alpha = 0.9f),
+                                                modifier = Modifier.size(28.dp)
+                                            )
+                                        }
+
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .border(2.dp, accent.copy(alpha = 0.35f), CircleShape)
+                                        )
+                                    }
+                                    Text(
+                                        text = actorName,
+                                        color = palette.textPrimary,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+            // ========================================================
+            // Inline Resolution & Progress Overlay (replaces popup dialog)
+            // Cover matches the exact color & color scheme of the head (TopBar / Surface)
+            // ========================================================
+            if (isResolvingThisCard && resolvingStatus != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(palette.surface)
+                        .clickable(enabled = false) {},
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                        modifier = Modifier.padding(24.dp)
+                    ) {
+                        SmoothProgressIndicator(
+                            modifier = Modifier.size(42.dp),
+                            color = accent,
+                            strokeWidth = 3.5.dp
+                        )
+                        Text(
+                            text = resolvingStatus,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            lineHeight = 18.sp
+                        )
+                    }
+                }
+            } else if (isResolvingThisCard && resolutionError != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(palette.surface)
+                        .clickable(enabled = false) {},
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.padding(20.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ErrorOutline,
+                            contentDescription = null,
+                            tint = Color(0xFFEF4444),
+                            modifier = Modifier.size(36.dp)
+                        )
+                        Text(
+                            text = resolutionError,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            lineHeight = 16.sp,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Button(
+                            onClick = onDismissResolutionError,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
+                        ) {
+                            Text("OK", fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+        // ========================================================
+        // 2. Native Material 3 UI Metadata Container
+        // ========================================================
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = palette.surface // BG-FIX
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 13.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Left & Center Column: [Top: Actor | Studio] and [Bottom: Title | Date]
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    // Row 1: Top-Left (Actor) | Top-Right (Studio)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        val mainActorId = remember(link.actorIds, preferredActorId, fullActorsMap) {
+                            if (!preferredActorId.isNullOrBlank()) {
+                                link.actorIds.firstOrNull { id ->
+                                    id.equals(preferredActorId, ignoreCase = true) ||
+                                    id == fullActorsMap[preferredActorId]?.id ||
+                                    fullActorsMap[id]?.id?.equals(preferredActorId, ignoreCase = true) == true ||
+                                    fullActorsMap[id]?.name?.equals(preferredActorId, ignoreCase = true) == true
+                                } ?: link.actorIds.firstOrNull()
+                            } else {
+                                link.actorIds.firstOrNull()
+                            }
+                        }
+
+                        if (mainActorId == null) {
+                            Text(
+                                text = "Scene",
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 0.15.sp
+                                ),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                        } else {
+                            val firstActorEntity = fullActorsMap[mainActorId] ?: fullActorsMap[mainActorId.trim().lowercase()]
+                            val firstActorName = actorsMap[mainActorId] ?: firstActorEntity?.name ?: mainActorId
+                            val realActorId = firstActorEntity?.id ?: mainActorId
+
+                            Row(
+                                modifier = Modifier.weight(1f, fill = false),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = firstActorName,
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = 0.15.sp
+                                    ),
+                                    color = Color(0xFF3B82F6),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier
+                                        .clip(RectangleShape)
+                                        .clickable {
+                                            debouncedClick {
+                                                subMenuState = null
+                                                onDismissActive()
+                                                onActorClick(realActorId)
+                                            }
+                                        }
+                                        .padding(horizontal = 2.dp, vertical = 2.dp)
+                                        .weight(1f, fill = false)
+                                )
+
+                                if (link.actorIds.size > 1) {
+                                    Spacer(modifier = Modifier.width(4.dp))
+
+                                    Box(
+                                        modifier = Modifier
+                                            .size(24.dp)
+                                            .clip(CircleShape)
+                                            .clickable {
+                                                debouncedClick {
+                                                    subMenuState = CardActionMenuState.ACTORS_MENU
+                                                    onActivate()
+                                                }
+                                            }
+                                            .testTag("more_actors_button"),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            painter = painterResource(id = R.drawable.ic_user_group),
+                                            contentDescription = "More Actors",
+                                            tint = Color(0xFF3B82F6),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        val firstStudioId = link.studioIds.firstOrNull()
+                        if (studioName.isNotEmpty()) {
+                            Text(
+                                text = studioName,
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    fontWeight = FontWeight.Normal,
+                                    letterSpacing = 0.2.sp
+                                ),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier
+                                    .clip(RectangleShape)
+                                    .clickable(enabled = firstStudioId != null) {
+                                        if (firstStudioId != null) {
+                                            subMenuState = null
+                                            onDismissActive()
+                                            onStudioClick(firstStudioId)
+                                        }
+                                    }
+                                    .padding(horizontal = 2.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+
+                    // Row 2: Bottom-Left (Title) | Bottom-Right (Date)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = link.title,
+                            style = MaterialTheme.typography.bodyLarge.copy(
+                                fontWeight = FontWeight.Normal,
+                                lineHeight = 20.sp
+                            ),
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        Text(
+                            text = displayDate,
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                letterSpacing = 0.25.sp
+                            ),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+fun formatDisplayDate(timestamp: Long): String {
+    return try {
+        val sdf = SimpleDateFormat("MMM dd, yyyy", Locale.US)
+        sdf.format(Date(timestamp))
+    } catch (e: Exception) {
+        "Jul 31, 2026"
+    }
+}
