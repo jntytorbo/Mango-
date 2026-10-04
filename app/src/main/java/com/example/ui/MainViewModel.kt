@@ -85,7 +85,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _splashProgress = MutableStateFlow(0.15f)
     val splashProgress: StateFlow<Float> = _splashProgress.asStateFlow()
 
-    private val _splashStatus = MutableStateFlow("تجهيز التطبيق والموارد...")
+    private val _splashStatus = MutableStateFlow("Initializing app & resources...")
     val splashStatus: StateFlow<String> = _splashStatus.asStateFlow()
 
     init {
@@ -97,7 +97,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun seedInitialDataIfEmpty() {
         viewModelScope.launch(Dispatchers.IO) {
             _splashProgress.value = 0.20f
-            _splashStatus.value = "تجهيز الإعدادات وقاعدة البيانات..."
+            _splashStatus.value = "Setting up database & preferences..."
             kotlinx.coroutines.delay(250L)
 
             val existingLinks = repository.allLinks.first()
@@ -118,7 +118,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             _splashProgress.value = 0.50f
-            _splashStatus.value = "تأكيد المفاتيح والتكاملات..."
+            _splashStatus.value = "Verifying API keys & integrations..."
             kotlinx.coroutines.delay(250L)
 
             // Seed default API Keys ONLY ONCE on first install using defaultKeysSeeded flag
@@ -135,7 +135,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             _splashProgress.value = 0.80f
-            _splashStatus.value = "تحميل الوسائط والتأثيرات..."
+            _splashStatus.value = "Pre-warming assets & video engine..."
 
             // Pre-warm and cache complete button system assets, full UI drawables (52/52), and Lexend font
             try {
@@ -162,7 +162,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             _splashProgress.value = 1.0f
-            _splashStatus.value = "اكتمل التجهيز!"
+            _splashStatus.value = "Ready!"
             kotlinx.coroutines.delay(450L)
 
             _isSplashLoading.value = false
