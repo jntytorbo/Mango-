@@ -34,6 +34,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.data.local.entity.StudioEntity
 import com.example.ui.MainViewModel
+import com.example.ui.ManagementSortOption
 import com.example.ui.ScreenState
 import com.example.ui.theme.AppTransitions
 import com.example.ui.theme.LocalAccentColor
@@ -89,8 +90,8 @@ fun StudioManagementScreen(
         when (sortOption) {
             ManagementSortOption.NAME_AZ -> studios.sortedBy { it.name.lowercase() }
             ManagementSortOption.NAME_ZA -> studios.sortedByDescending { it.name.lowercase() }
-            ManagementSortOption.NEWEST -> studios.sortedByDescending { it.createdAt }
-            ManagementSortOption.OLDEST -> studios.sortedBy { it.createdAt }
+            ManagementSortOption.RECENTLY_ADDED -> studios.sortedByDescending { it.createdAt }
+            ManagementSortOption.OLDEST_ADDED -> studios.sortedBy { it.createdAt }
         }
     }
 
@@ -131,7 +132,7 @@ fun StudioManagementScreen(
                 title = { Text("Studios (${studios.size})", color = palette.textPrimary) },
                 navigationIcon = {
                     IconButton(onClick = { viewModel.navigateBack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = palette.textPrimary)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = palette.textPrimary, modifier = Modifier.size(24.dp))
                     }
                 },
                 actions = {
@@ -143,7 +144,8 @@ fun StudioManagementScreen(
                             Icon(
                                 painter = painterResource(id = R.drawable.ic_app_sort),
                                 contentDescription = "Sort",
-                                tint = palette.textPrimary
+                                tint = palette.textPrimary,
+                                modifier = Modifier.size(24.dp)
                             )
                         }
 
@@ -179,26 +181,26 @@ fun StudioManagementScreen(
                                 }
                             )
                             DropdownMenuItem(
-                                text = { Text("New", color = if (sortOption == ManagementSortOption.NEWEST) accent else palette.textPrimary) },
+                                text = { Text("Recently Added", color = if (sortOption == ManagementSortOption.RECENTLY_ADDED) accent else palette.textPrimary) },
                                 leadingIcon = {
-                                    if (sortOption == ManagementSortOption.NEWEST) {
+                                    if (sortOption == ManagementSortOption.RECENTLY_ADDED) {
                                         Icon(Icons.Default.Check, contentDescription = null, tint = accent)
                                     }
                                 },
                                 onClick = {
-                                    sortOption = ManagementSortOption.NEWEST
+                                    sortOption = ManagementSortOption.RECENTLY_ADDED
                                     showSortMenu = false
                                 }
                             )
                             DropdownMenuItem(
-                                text = { Text("Old", color = if (sortOption == ManagementSortOption.OLDEST) accent else palette.textPrimary) },
+                                text = { Text("Oldest Added", color = if (sortOption == ManagementSortOption.OLDEST_ADDED) accent else palette.textPrimary) },
                                 leadingIcon = {
-                                    if (sortOption == ManagementSortOption.OLDEST) {
+                                    if (sortOption == ManagementSortOption.OLDEST_ADDED) {
                                         Icon(Icons.Default.Check, contentDescription = null, tint = accent)
                                     }
                                 },
                                 onClick = {
-                                    sortOption = ManagementSortOption.OLDEST
+                                    sortOption = ManagementSortOption.OLDEST_ADDED
                                     showSortMenu = false
                                 }
                             )
@@ -206,7 +208,7 @@ fun StudioManagementScreen(
                     }
 
                     IconButton(onClick = { showAddDialog = true }, modifier = Modifier.testTag("add_studio_button")) {
-                        Icon(Icons.Default.AddBusiness, contentDescription = "Add Studio", tint = accent)
+                        Icon(Icons.Default.AddBusiness, contentDescription = "Add Studio", tint = palette.textPrimary, modifier = Modifier.size(24.dp))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = palette.surface)

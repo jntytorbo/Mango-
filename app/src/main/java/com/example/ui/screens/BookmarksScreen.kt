@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -147,12 +148,10 @@ fun BookmarksScreen(
         }
 
         when (currentSort) {
-            SortMode.CARD_NEWEST, SortMode.NEWEST -> searched.sortedByDescending { it.assignedDate ?: it.createdAt }
-            SortMode.CARD_OLDEST, SortMode.OLDEST -> searched.sortedBy { it.assignedDate ?: it.createdAt }
+            SortMode.NEW -> searched.sortedByDescending { it.assignedDate ?: it.createdAt }
+            SortMode.OLD -> searched.sortedBy { it.assignedDate ?: it.createdAt }
             SortMode.RECENTLY_ADDED -> searched.sortedByDescending { it.createdAt }
             SortMode.OLDEST_ADDED -> searched.sortedBy { it.createdAt }
-            SortMode.TITLE_AZ -> searched.sortedBy { it.title.lowercase() }
-            SortMode.TITLE_ZA -> searched.sortedByDescending { it.title.lowercase() }
         }
     }
 
@@ -270,7 +269,8 @@ fun BookmarksScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Close Search"
+                                contentDescription = "Close Search",
+                                modifier = Modifier.size(24.dp)
                             )
                         }
                     } else {
@@ -280,7 +280,8 @@ fun BookmarksScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Back"
+                                contentDescription = "Back",
+                                modifier = Modifier.size(24.dp)
                             )
                         }
                     }
@@ -295,7 +296,8 @@ fun BookmarksScreen(
                                 Icon(
                                     painter = painterResource(id = R.drawable.ic_action_cancel),
                                     contentDescription = "Clear Search",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(24.dp)
                                 )
                             }
                         } else {
@@ -308,7 +310,8 @@ fun BookmarksScreen(
                             ) {
                                 Icon(
                                     painter = painterResource(id = R.drawable.ic_action_cancel),
-                                    contentDescription = "Close Search"
+                                    contentDescription = "Close Search",
+                                    modifier = Modifier.size(24.dp)
                                 )
                             }
                         }
@@ -319,7 +322,8 @@ fun BookmarksScreen(
                         ) {
                             Icon(
                                 painter = painterResource(id = R.drawable.ic_app_search),
-                                contentDescription = "Search"
+                                contentDescription = "Search",
+                                modifier = Modifier.size(24.dp)
                             )
                         }
 
@@ -330,7 +334,8 @@ fun BookmarksScreen(
                             ) {
                                 Icon(
                                     painter = painterResource(id = R.drawable.ic_app_sort),
-                                    contentDescription = "Sort Mode"
+                                    contentDescription = "Sort Mode",
+                                    modifier = Modifier.size(24.dp)
                                 )
                             }
 
@@ -338,18 +343,19 @@ fun BookmarksScreen(
                                 expanded = showSortMenu,
                                 onDismissRequest = { showSortMenu = false },
                                 shape = RoundedCornerShape(16.dp),
-                                containerColor = palette.cardBg // BG-FIX
+                                containerColor = palette.surface,
+                                modifier = Modifier.background(palette.surface)
                             ) {
                                 DropdownMenuItem(
                                     text = {
                                         Text(
                                             "New",
-                                            fontWeight = if (currentSort == SortMode.CARD_NEWEST || currentSort == SortMode.NEWEST) FontWeight.Bold else FontWeight.Normal,
-                                            color = if (currentSort == SortMode.CARD_NEWEST || currentSort == SortMode.NEWEST) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                            fontWeight = if (currentSort == SortMode.NEW) FontWeight.Bold else FontWeight.Normal,
+                                            color = if (currentSort == SortMode.NEW) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                                         )
                                     },
                                     leadingIcon = {
-                                        if (currentSort == SortMode.CARD_NEWEST || currentSort == SortMode.NEWEST) {
+                                        if (currentSort == SortMode.NEW) {
                                             Icon(
                                                 Icons.Default.Check,
                                                 contentDescription = null,
@@ -358,7 +364,7 @@ fun BookmarksScreen(
                                         }
                                     },
                                     onClick = {
-                                        viewModel.sortMode.value = SortMode.CARD_NEWEST
+                                        viewModel.sortMode.value = SortMode.NEW
                                         showSortMenu = false
                                     }
                                 )
@@ -366,12 +372,12 @@ fun BookmarksScreen(
                                     text = {
                                         Text(
                                             "Old",
-                                            fontWeight = if (currentSort == SortMode.CARD_OLDEST || currentSort == SortMode.OLDEST) FontWeight.Bold else FontWeight.Normal,
-                                            color = if (currentSort == SortMode.CARD_OLDEST || currentSort == SortMode.OLDEST) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                            fontWeight = if (currentSort == SortMode.OLD) FontWeight.Bold else FontWeight.Normal,
+                                            color = if (currentSort == SortMode.OLD) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                                         )
                                     },
                                     leadingIcon = {
-                                        if (currentSort == SortMode.CARD_OLDEST || currentSort == SortMode.OLDEST) {
+                                        if (currentSort == SortMode.OLD) {
                                             Icon(
                                                 Icons.Default.Check,
                                                 contentDescription = null,
@@ -380,7 +386,7 @@ fun BookmarksScreen(
                                         }
                                     },
                                     onClick = {
-                                        viewModel.sortMode.value = SortMode.CARD_OLDEST
+                                        viewModel.sortMode.value = SortMode.OLD
                                         showSortMenu = false
                                     }
                                 )
@@ -425,50 +431,6 @@ fun BookmarksScreen(
                                     },
                                     onClick = {
                                         viewModel.sortMode.value = SortMode.OLDEST_ADDED
-                                        showSortMenu = false
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            "A - Z",
-                                            fontWeight = if (currentSort == SortMode.TITLE_AZ) FontWeight.Bold else FontWeight.Normal,
-                                            color = if (currentSort == SortMode.TITLE_AZ) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                        )
-                                    },
-                                    leadingIcon = {
-                                        if (currentSort == SortMode.TITLE_AZ) {
-                                            Icon(
-                                                Icons.Default.Check,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.primary
-                                            )
-                                        }
-                                    },
-                                    onClick = {
-                                        viewModel.sortMode.value = SortMode.TITLE_AZ
-                                        showSortMenu = false
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            "Z - A",
-                                            fontWeight = if (currentSort == SortMode.TITLE_ZA) FontWeight.Bold else FontWeight.Normal,
-                                            color = if (currentSort == SortMode.TITLE_ZA) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                        )
-                                    },
-                                    leadingIcon = {
-                                        if (currentSort == SortMode.TITLE_ZA) {
-                                            Icon(
-                                                Icons.Default.Check,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.primary
-                                            )
-                                        }
-                                    },
-                                    onClick = {
-                                        viewModel.sortMode.value = SortMode.TITLE_ZA
                                         showSortMenu = false
                                     }
                                 )

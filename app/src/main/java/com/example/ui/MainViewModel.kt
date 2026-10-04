@@ -18,14 +18,17 @@ import java.util.UUID
 import com.example.R
 
 enum class SortMode {
-    CARD_NEWEST,      // New (Card Date - Newest)
-    CARD_OLDEST,      // Old (Card Date - Oldest)
-    RECENTLY_ADDED,   // Recently Added (Added to app date - Newest)
-    OLDEST_ADDED,     // Oldest Added (Added to app date - Oldest)
-    NEWEST,           // Backward compatibility (maps to CARD_NEWEST)
-    OLDEST,           // Backward compatibility (maps to CARD_OLDEST)
-    TITLE_AZ,
-    TITLE_ZA
+    NEW,              // New: by scene date (assignedDate ?: createdAt descending)
+    OLD,              // Old: by scene date (assignedDate ?: createdAt ascending)
+    RECENTLY_ADDED,   // Recently Added: by date added (createdAt descending)
+    OLDEST_ADDED      // Oldest Added: by date added (createdAt ascending)
+}
+
+enum class ManagementSortOption {
+    NAME_AZ,          // A - Z (name.lowercase() ascending)
+    NAME_ZA,          // Z - A (name.lowercase() descending)
+    RECENTLY_ADDED,   // Recently Added (createdAt descending)
+    OLDEST_ADDED      // Oldest Added (createdAt ascending)
 }
 
 enum class StashSearchType {
@@ -1301,7 +1304,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // Search, Tabs, Filter and Sort
     val searchQuery = MutableStateFlow("")
-    val sortMode = MutableStateFlow(SortMode.NEWEST)
+    val sortMode = MutableStateFlow<SortMode>(SortMode.NEW)
     val homeTab = MutableStateFlow(0) // 0: Videos, 1: Channels/Studios, 2: Bookmarks
     val bookmarkedIds = MutableStateFlow<Set<String>>(emptySet())
     val lastFeedRefresh = MutableStateFlow(System.currentTimeMillis())
@@ -1385,12 +1388,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         when (sort) {
-            SortMode.CARD_NEWEST, SortMode.NEWEST -> list.sortedByDescending { it.assignedDate ?: it.createdAt }
-            SortMode.CARD_OLDEST, SortMode.OLDEST -> list.sortedBy { it.assignedDate ?: it.createdAt }
+            SortMode.NEW -> list.sortedByDescending { it.assignedDate ?: it.createdAt }
+            SortMode.OLD -> list.sortedBy { it.assignedDate ?: it.createdAt }
             SortMode.RECENTLY_ADDED -> list.sortedByDescending { it.createdAt }
             SortMode.OLDEST_ADDED -> list.sortedBy { it.createdAt }
-            SortMode.TITLE_AZ -> list.sortedBy { it.title.lowercase() }
-            SortMode.TITLE_ZA -> list.sortedByDescending { it.title.lowercase() }
         }
     }.distinctUntilChanged()
     .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())

@@ -57,6 +57,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.CompositingStrategy
@@ -171,8 +173,6 @@ fun HomeScreen(
         map
     }
 
-    var isSearchExpanded by remember { mutableStateOf(false) }
-    var showSortMenu by remember { mutableStateOf(false) }
     var activeOverlayCardId by remember { mutableStateOf<String?>(null) }
     var showEditActorDialog by remember { mutableStateOf(false) }
     var showEditStudioDialog by remember { mutableStateOf(false) }
@@ -220,361 +220,20 @@ fun HomeScreen(
         activeOverlayCardId = null
     }
 
-    val focusRequester = remember { FocusRequester() }
-    val focusManager = LocalFocusManager.current
-
     val topBarContent = LocalTopBarContent.current
-    val currentTopBar: @Composable () -> Unit = remember(
-        isSearchExpanded,
-        searchQuery,
-        showSortMenu,
-        currentSort,
-        targetActor,
-        targetStudio,
-        currentScreen,
-        actorsMap,
-        studiosMap,
-        onOpenDrawer
-    ) {
-        {
-            TopAppBar(
-                title = {
-                    if (isSearchExpanded) {
-                        LaunchedEffect(Unit) {
-                            focusRequester.requestFocus()
-                        }
-                        BasicTextField(
-                            value = searchQuery,
-                            onValueChange = { viewModel.searchQuery.value = it },
-                            singleLine = true,
-                            textStyle = MaterialTheme.typography.bodyLarge.copy(
-                                color = MaterialTheme.colorScheme.onSurface,
-                                fontSize = 15.sp
-                            ),
-                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                            keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .focusRequester(focusRequester)
-                                .testTag("search_scenes_input"),
-                            decorationBox = { innerTextField ->
-                                Box(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    contentAlignment = Alignment.CenterStart
-                                ) {
-                                    if (searchQuery.isEmpty()) {
-                                        Text(
-                                            text = "Search scenes, actors, studios...",
-                                            style = MaterialTheme.typography.bodyLarge.copy(
-                                                fontSize = 15.sp,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            ),
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                    }
-                                    innerTextField()
-                                }
-                            }
-                        )
-                    } else {
-                        val headerTitle = when {
-                            targetActor != null -> targetActor.name
-                            targetStudio != null -> targetStudio.name
-                            currentScreen is ScreenState.ActorScenes -> {
-                                val id = (currentScreen as ScreenState.ActorScenes).actorId
-                                actorsMap[id] ?: id
-                            }
-                            currentScreen is ScreenState.StudioScenes -> {
-                                val id = (currentScreen as ScreenState.StudioScenes).studioId
-                                studiosMap[id] ?: id
-                            }
-                            else -> "Goony"
-                        }
-                        Text(
-                            text = headerTitle,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            style = MaterialTheme.typography.titleLarge.copy(
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = (-0.5).sp
-                            )
-                        )
-                    }
-                },
-                navigationIcon = {
-                    if (isSearchExpanded) {
-                        IconButton(
-                            onClick = {
-                                isSearchExpanded = false
-                                viewModel.searchQuery.value = ""
-                            }
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Close Search"
-                            )
-                        }
-                    } else if (targetActor != null || targetStudio != null || currentScreen is ScreenState.ActorScenes || currentScreen is ScreenState.StudioScenes) {
-                        IconButton(
-                            onClick = { viewModel.navigateBack() },
-                            modifier = Modifier.testTag("back_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Back"
-                            )
-                        }
-                    } else {
-                        IconButton(
-                            onClick = onOpenDrawer,
-                            modifier = Modifier.testTag("open_drawer_button")
-                        ) {
-                            Icon(
-                                painter = painterResource(id = R.drawable.ic_app_menu),
-                                contentDescription = "Open Drawer"
-                            )
-                        }
-                    }
-                },
-                actions = {
-                    if (isSearchExpanded) {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(
-                                onClick = { viewModel.searchQuery.value = "" },
-                                modifier = Modifier.testTag("clear_search_button")
-                            ) {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.ic_action_cancel),
-                                    contentDescription = "Clear Search",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        } else {
-                            IconButton(
-                                onClick = {
-                                    isSearchExpanded = false
-                                    viewModel.searchQuery.value = ""
-                                },
-                                modifier = Modifier.testTag("close_search_button")
-                            ) {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.ic_action_cancel),
-                                    contentDescription = "Close Search"
-                                )
-                            }
-                        }
-                    } else {
-                        // Native Search Action
-                        IconButton(
-                            onClick = { isSearchExpanded = true },
-                            modifier = Modifier.testTag("search_action_button")
-                        ) {
-                            Icon(
-                                painter = painterResource(id = R.drawable.ic_app_search),
-                                contentDescription = "Search"
-                            )
-                        }
-
-                        // Native Sort Action (A-Z, Z-A, New, Old) with Rounded Native UI
-                        Box {
-                            IconButton(
-                                onClick = { showSortMenu = true },
-                                modifier = Modifier.testTag("sort_action_button")
-                            ) {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.ic_app_sort),
-                                    contentDescription = "Sort Mode"
-                                )
-                            }
-
-                            DropdownMenu(
-                                expanded = showSortMenu,
-                                onDismissRequest = { showSortMenu = false },
-                                shape = RoundedCornerShape(16.dp),
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant // BG-FIX
-                            ) {
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            "New",
-                                            fontWeight = if (currentSort == SortMode.CARD_NEWEST || currentSort == SortMode.NEWEST) FontWeight.Bold else FontWeight.Normal,
-                                            color = if (currentSort == SortMode.CARD_NEWEST || currentSort == SortMode.NEWEST) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                        )
-                                    },
-                                    leadingIcon = {
-                                        if (currentSort == SortMode.CARD_NEWEST || currentSort == SortMode.NEWEST) {
-                                            Icon(
-                                                Icons.Default.Check,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.primary
-                                            )
-                                        }
-                                    },
-                                    onClick = {
-                                        viewModel.sortMode.value = SortMode.CARD_NEWEST
-                                        showSortMenu = false
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            "Old",
-                                            fontWeight = if (currentSort == SortMode.CARD_OLDEST || currentSort == SortMode.OLDEST) FontWeight.Bold else FontWeight.Normal,
-                                            color = if (currentSort == SortMode.CARD_OLDEST || currentSort == SortMode.OLDEST) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                        )
-                                    },
-                                    leadingIcon = {
-                                        if (currentSort == SortMode.CARD_OLDEST || currentSort == SortMode.OLDEST) {
-                                            Icon(
-                                                Icons.Default.Check,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.primary
-                                            )
-                                        }
-                                    },
-                                    onClick = {
-                                        viewModel.sortMode.value = SortMode.CARD_OLDEST
-                                        showSortMenu = false
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            "Recently Added",
-                                            fontWeight = if (currentSort == SortMode.RECENTLY_ADDED) FontWeight.Bold else FontWeight.Normal,
-                                            color = if (currentSort == SortMode.RECENTLY_ADDED) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                        )
-                                    },
-                                    leadingIcon = {
-                                        if (currentSort == SortMode.RECENTLY_ADDED) {
-                                            Icon(
-                                                Icons.Default.Check,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.primary
-                                            )
-                                        }
-                                    },
-                                    onClick = {
-                                        viewModel.sortMode.value = SortMode.RECENTLY_ADDED
-                                        showSortMenu = false
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            "Oldest Added",
-                                            fontWeight = if (currentSort == SortMode.OLDEST_ADDED) FontWeight.Bold else FontWeight.Normal,
-                                            color = if (currentSort == SortMode.OLDEST_ADDED) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                        )
-                                    },
-                                    leadingIcon = {
-                                        if (currentSort == SortMode.OLDEST_ADDED) {
-                                            Icon(
-                                                Icons.Default.Check,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.primary
-                                            )
-                                        }
-                                    },
-                                    onClick = {
-                                        viewModel.sortMode.value = SortMode.OLDEST_ADDED
-                                        showSortMenu = false
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            "A - Z",
-                                            fontWeight = if (currentSort == SortMode.TITLE_AZ) FontWeight.Bold else FontWeight.Normal,
-                                            color = if (currentSort == SortMode.TITLE_AZ) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                        )
-                                    },
-                                    leadingIcon = {
-                                        if (currentSort == SortMode.TITLE_AZ) {
-                                            Icon(
-                                                Icons.Default.Check,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.primary
-                                            )
-                                        }
-                                    },
-                                    onClick = {
-                                        viewModel.sortMode.value = SortMode.TITLE_AZ
-                                        showSortMenu = false
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            "Z - A",
-                                            fontWeight = if (currentSort == SortMode.TITLE_ZA) FontWeight.Bold else FontWeight.Normal,
-                                            color = if (currentSort == SortMode.TITLE_ZA) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                        )
-                                    },
-                                    leadingIcon = {
-                                        if (currentSort == SortMode.TITLE_ZA) {
-                                            Icon(
-                                                Icons.Default.Check,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.primary
-                                            )
-                                        }
-                                    },
-                                    onClick = {
-                                        viewModel.sortMode.value = SortMode.TITLE_ZA
-                                        showSortMenu = false
-                                    }
-                                )
-                            }
-                        }
-
-                        // Edit Actor/Studio Action in Header
-                        if (targetActor != null) {
-                            IconButton(
-                                onClick = { showEditActorDialog = true },
-                                modifier = Modifier.testTag("edit_actor_header_button")
-                            ) {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.ic_edit_pencil),
-                                    contentDescription = "Edit Actor"
-                                )
-                            }
-                        } else if (targetStudio != null) {
-                            IconButton(
-                                onClick = { showEditStudioDialog = true },
-                                modifier = Modifier.testTag("edit_studio_header_button")
-                            ) {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.ic_edit_pencil),
-                                    contentDescription = "Edit Studio"
-                                )
-                            }
-                        }
-
-                        // Native Add Scene Action - ONLY on Main Screen (Home)
-                        if (currentScreen is ScreenState.Home) {
-                            IconButton(
-                                onClick = { viewModel.navigateTo(ScreenState.AddEditLink()) },
-                                modifier = Modifier.testTag("add_scene_button")
-                            ) {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.ic_app_add),
-                                    contentDescription = "Add Scene"
-                                )
-                            }
-                        }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
-                    actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            )
-        }
+    val currentTopBar: @Composable () -> Unit = {
+        HomeTopBar(
+            viewModel = viewModel,
+            targetActor = targetActor,
+            targetStudio = targetStudio,
+            currentScreen = currentScreen,
+            actorsMap = actorsMap,
+            studiosMap = studiosMap,
+            onOpenDrawer = onOpenDrawer,
+            onEditActor = { showEditActorDialog = true },
+            onEditStudio = { showEditStudioDialog = true },
+            onAddScene = { viewModel.navigateTo(ScreenState.AddEditLink()) }
+        )
     }
     SideEffect {
         topBarContent.value = currentTopBar
@@ -1954,4 +1613,332 @@ private fun SelectPhotoCircleItem(
                 .privacyImageBlur(isBetaTest)
         )
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun HomeTopBar(
+    viewModel: MainViewModel,
+    targetActor: ActorEntity?,
+    targetStudio: StudioEntity?,
+    currentScreen: ScreenState,
+    actorsMap: Map<String, String>,
+    studiosMap: Map<String, String>,
+    onOpenDrawer: () -> Unit,
+    onEditActor: () -> Unit,
+    onEditStudio: () -> Unit,
+    onAddScene: () -> Unit
+) {
+    val palette = LocalVaultPalette.current
+    val accent = LocalAccentColor.current
+    val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
+    val currentSort by viewModel.sortMode.collectAsStateWithLifecycle()
+
+    var isSearchExpanded by rememberSaveable { mutableStateOf(false) }
+    var showSortMenu by remember { mutableStateOf(false) }
+    val focusRequester = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
+
+    val isEntityScenes = targetActor != null || targetStudio != null || currentScreen is ScreenState.ActorScenes || currentScreen is ScreenState.StudioScenes
+
+    TopAppBar(
+        modifier = Modifier.drawBehind {
+            drawLine(
+                color = palette.border,
+                start = Offset(0f, size.height),
+                end = Offset(size.width, size.height),
+                strokeWidth = 1.dp.toPx()
+            )
+        },
+        title = {
+            if (isSearchExpanded) {
+                LaunchedEffect(Unit) {
+                    try {
+                        focusRequester.requestFocus()
+                    } catch (_: Exception) {}
+                }
+                BasicTextField(
+                    value = searchQuery,
+                    onValueChange = { viewModel.searchQuery.value = it },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 15.sp
+                    ),
+                    cursorBrush = SolidColor(accent),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester)
+                        .testTag("search_home_input"),
+                    decorationBox = { innerTextField ->
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            if (searchQuery.isEmpty()) {
+                                Text(
+                                    text = if (targetActor != null) "Search scenes for ${targetActor.name}..."
+                                           else if (targetStudio != null) "Search scenes for ${targetStudio.name}..."
+                                           else "Search vault scenes...",
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        fontSize = 15.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    ),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            innerTextField()
+                        }
+                    }
+                )
+            } else {
+                Text(
+                    text = when {
+                        targetActor != null -> targetActor.name
+                        targetStudio != null -> targetStudio.name
+                        else -> "Goony"
+                    },
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = (-0.5).sp
+                    ),
+                    color = palette.textPrimary
+                )
+            }
+        },
+        navigationIcon = {
+            if (isSearchExpanded) {
+                IconButton(
+                    onClick = {
+                        isSearchExpanded = false
+                        viewModel.searchQuery.value = ""
+                    },
+                    modifier = Modifier.testTag("close_search_back_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Close Search",
+                        tint = palette.textPrimary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            } else if (isEntityScenes) {
+                IconButton(
+                    onClick = { viewModel.navigateBack() },
+                    modifier = Modifier.testTag("back_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = palette.textPrimary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            } else {
+                IconButton(
+                    onClick = onOpenDrawer,
+                    modifier = Modifier.testTag("open_drawer_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Menu,
+                        contentDescription = "Open Drawer",
+                        tint = palette.textPrimary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+        },
+        actions = {
+            if (isSearchExpanded) {
+                if (searchQuery.isNotEmpty()) {
+                    IconButton(
+                        onClick = { viewModel.searchQuery.value = "" },
+                        modifier = Modifier.testTag("clear_search_button")
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_action_cancel),
+                            contentDescription = "Clear Search",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                } else {
+                    IconButton(
+                        onClick = {
+                            isSearchExpanded = false
+                            viewModel.searchQuery.value = ""
+                        },
+                        modifier = Modifier.testTag("close_search_button")
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_action_cancel),
+                            contentDescription = "Close Search",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+            } else {
+                IconButton(
+                    onClick = { isSearchExpanded = true },
+                    modifier = Modifier.testTag("search_action_button")
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_app_search),
+                        contentDescription = "Search",
+                        tint = palette.textPrimary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+
+                Box {
+                    IconButton(
+                        onClick = { showSortMenu = true },
+                        modifier = Modifier.testTag("sort_action_button")
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_app_sort),
+                            contentDescription = "Sort Mode",
+                            tint = palette.textPrimary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+
+                    DropdownMenu(
+                        expanded = showSortMenu,
+                        onDismissRequest = { showSortMenu = false },
+                        shape = RoundedCornerShape(16.dp),
+                        containerColor = palette.surface,
+                        modifier = Modifier.background(palette.surface)
+                    ) {
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    "New",
+                                    fontWeight = if (currentSort == SortMode.NEW) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (currentSort == SortMode.NEW) accent else palette.textPrimary
+                                )
+                            },
+                            leadingIcon = {
+                                if (currentSort == SortMode.NEW) {
+                                    Icon(Icons.Default.Check, contentDescription = null, tint = accent)
+                                }
+                            },
+                            onClick = {
+                                viewModel.sortMode.value = SortMode.NEW
+                                showSortMenu = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    "Old",
+                                    fontWeight = if (currentSort == SortMode.OLD) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (currentSort == SortMode.OLD) accent else palette.textPrimary
+                                )
+                            },
+                            leadingIcon = {
+                                if (currentSort == SortMode.OLD) {
+                                    Icon(Icons.Default.Check, contentDescription = null, tint = accent)
+                                }
+                            },
+                            onClick = {
+                                viewModel.sortMode.value = SortMode.OLD
+                                showSortMenu = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    "Recently Added",
+                                    fontWeight = if (currentSort == SortMode.RECENTLY_ADDED) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (currentSort == SortMode.RECENTLY_ADDED) accent else palette.textPrimary
+                                )
+                            },
+                            leadingIcon = {
+                                if (currentSort == SortMode.RECENTLY_ADDED) {
+                                    Icon(Icons.Default.Check, contentDescription = null, tint = accent)
+                                }
+                            },
+                            onClick = {
+                                viewModel.sortMode.value = SortMode.RECENTLY_ADDED
+                                showSortMenu = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    "Oldest Added",
+                                    fontWeight = if (currentSort == SortMode.OLDEST_ADDED) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (currentSort == SortMode.OLDEST_ADDED) accent else palette.textPrimary
+                                )
+                            },
+                            leadingIcon = {
+                                if (currentSort == SortMode.OLDEST_ADDED) {
+                                    Icon(Icons.Default.Check, contentDescription = null, tint = accent)
+                                }
+                            },
+                            onClick = {
+                                viewModel.sortMode.value = SortMode.OLDEST_ADDED
+                                showSortMenu = false
+                            }
+                        )
+                    }
+                }
+
+                if (targetActor != null) {
+                    IconButton(
+                        onClick = onEditActor,
+                        modifier = Modifier.testTag("edit_actor_button")
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_edit_pencil),
+                            contentDescription = "Actor Details",
+                            tint = palette.textPrimary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+
+                if (targetStudio != null) {
+                    IconButton(
+                        onClick = onEditStudio,
+                        modifier = Modifier.testTag("edit_studio_button")
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_edit_pencil),
+                            contentDescription = "Studio Details",
+                            tint = palette.textPrimary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+
+                if (!isEntityScenes) {
+                    IconButton(
+                        onClick = onAddScene,
+                        modifier = Modifier.testTag("add_scene_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Add Scene",
+                            tint = palette.textPrimary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+            }
+        },
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = palette.surface,
+            titleContentColor = palette.textPrimary,
+            navigationIconContentColor = palette.textPrimary,
+            actionIconContentColor = palette.textPrimary
+        )
+    )
 }

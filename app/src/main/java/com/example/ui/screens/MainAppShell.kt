@@ -73,6 +73,7 @@ fun MainAppShell(viewModel: MainViewModel) {
     val isSplashLoading by viewModel.isSplashLoading.collectAsStateWithLifecycle()
     val splashProgress by viewModel.splashProgress.collectAsStateWithLifecycle()
     val splashStatus by viewModel.splashStatus.collectAsStateWithLifecycle()
+    val settings by viewModel.settings.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
@@ -540,6 +541,7 @@ fun MainAppShell(viewModel: MainViewModel) {
             SplashScreen(
                 progress = splashProgress,
                 status = splashStatus,
+                appIconStyle = settings.appIconStyle,
                 modifier = Modifier.fillMaxSize()
             )
         }

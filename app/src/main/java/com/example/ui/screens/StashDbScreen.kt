@@ -497,7 +497,8 @@ fun StashDbScreen(
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = "Close Search",
-                                tint = palette.textPrimary
+                                tint = palette.textPrimary,
+                                modifier = Modifier.size(24.dp)
                             )
                         }
                     } else {
@@ -508,7 +509,8 @@ fun StashDbScreen(
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = "Back",
-                                tint = palette.textPrimary
+                                tint = palette.textPrimary,
+                                modifier = Modifier.size(24.dp)
                             )
                         }
                     }
@@ -542,7 +544,8 @@ fun StashDbScreen(
                                 Icon(
                                     painter = painterResource(id = R.drawable.ic_app_search),
                                     contentDescription = "Search",
-                                    tint = accent
+                                    tint = palette.textPrimary,
+                                    modifier = Modifier.size(24.dp)
                                 )
                             }
                             IconButton(
@@ -552,7 +555,8 @@ fun StashDbScreen(
                                 Icon(
                                     painter = painterResource(id = R.drawable.ic_action_cancel),
                                     contentDescription = "Clear text",
-                                    tint = palette.textSecondary
+                                    tint = palette.textSecondary,
+                                    modifier = Modifier.size(24.dp)
                                 )
                             }
                         } else {
@@ -565,7 +569,8 @@ fun StashDbScreen(
                                 Icon(
                                     painter = painterResource(id = R.drawable.ic_action_cancel),
                                     contentDescription = "Close Search",
-                                    tint = palette.textPrimary
+                                    tint = palette.textPrimary,
+                                    modifier = Modifier.size(24.dp)
                                 )
                             }
                         }
@@ -577,7 +582,8 @@ fun StashDbScreen(
                             Icon(
                                 painter = painterResource(id = R.drawable.ic_app_search),
                                 contentDescription = "Search",
-                                tint = palette.textPrimary
+                                tint = palette.textPrimary,
+                                modifier = Modifier.size(24.dp)
                             )
                         }
                     }

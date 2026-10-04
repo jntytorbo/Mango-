@@ -309,7 +309,7 @@ fun AddEditLinkScreen(
                 title = { Text(if (linkId != null) "Edit Scene" else "Add Scene", color = palette.textPrimary, fontWeight = FontWeight.Bold) }, // BG-FIX
                 navigationIcon = {
                     IconButton(onClick = { viewModel.navigateBack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = palette.textPrimary) // BG-FIX
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = palette.textPrimary, modifier = Modifier.size(24.dp)) // BG-FIX
                     }
                 },
                 actions = {
@@ -363,7 +363,8 @@ fun AddEditLinkScreen(
                         Icon(
                             painter = painterResource(id = R.drawable.ic_action_save),
                             contentDescription = "Save",
-                            tint = if (title.isNotBlank() && !isSaving) accent else palette.textMuted
+                            tint = if (title.isNotBlank() && !isSaving) palette.textPrimary else palette.textMuted,
+                            modifier = Modifier.size(24.dp)
                         )
                     }
                 },

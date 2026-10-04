@@ -36,6 +36,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.data.local.entity.ActorEntity
 import com.example.ui.MainViewModel
+import com.example.ui.ManagementSortOption
 import com.example.ui.ScreenState
 import com.example.ui.theme.AppTransitions
 import com.example.ui.theme.LocalAccentColor
@@ -97,8 +98,8 @@ fun ActorManagementScreen(
         when (sortOption) {
             ManagementSortOption.NAME_AZ -> actors.sortedBy { it.name.lowercase() }
             ManagementSortOption.NAME_ZA -> actors.sortedByDescending { it.name.lowercase() }
-            ManagementSortOption.NEWEST -> actors.sortedByDescending { it.createdAt }
-            ManagementSortOption.OLDEST -> actors.sortedBy { it.createdAt }
+            ManagementSortOption.RECENTLY_ADDED -> actors.sortedByDescending { it.createdAt }
+            ManagementSortOption.OLDEST_ADDED -> actors.sortedBy { it.createdAt }
         }
     }
 
@@ -139,7 +140,7 @@ fun ActorManagementScreen(
                 title = { Text("Actors (${actors.size})", color = palette.textPrimary) },
                 navigationIcon = {
                     IconButton(onClick = { viewModel.navigateBack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = palette.textPrimary)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = palette.textPrimary, modifier = Modifier.size(24.dp))
                     }
                 },
                 actions = {
@@ -151,7 +152,8 @@ fun ActorManagementScreen(
                             Icon(
                                 painter = painterResource(id = R.drawable.ic_app_sort),
                                 contentDescription = "Sort",
-                                tint = palette.textPrimary
+                                tint = palette.textPrimary,
+                                modifier = Modifier.size(24.dp)
                             )
                         }
 
@@ -187,26 +189,26 @@ fun ActorManagementScreen(
                                 }
                             )
                             DropdownMenuItem(
-                                text = { Text("New", color = if (sortOption == ManagementSortOption.NEWEST) accent else palette.textPrimary) },
+                                text = { Text("Recently Added", color = if (sortOption == ManagementSortOption.RECENTLY_ADDED) accent else palette.textPrimary) },
                                 leadingIcon = {
-                                    if (sortOption == ManagementSortOption.NEWEST) {
+                                    if (sortOption == ManagementSortOption.RECENTLY_ADDED) {
                                         Icon(Icons.Default.Check, contentDescription = null, tint = accent)
                                     }
                                 },
                                 onClick = {
-                                    sortOption = ManagementSortOption.NEWEST
+                                    sortOption = ManagementSortOption.RECENTLY_ADDED
                                     showSortMenu = false
                                 }
                             )
                             DropdownMenuItem(
-                                text = { Text("Old", color = if (sortOption == ManagementSortOption.OLDEST) accent else palette.textPrimary) },
+                                text = { Text("Oldest Added", color = if (sortOption == ManagementSortOption.OLDEST_ADDED) accent else palette.textPrimary) },
                                 leadingIcon = {
-                                    if (sortOption == ManagementSortOption.OLDEST) {
+                                    if (sortOption == ManagementSortOption.OLDEST_ADDED) {
                                         Icon(Icons.Default.Check, contentDescription = null, tint = accent)
                                     }
                                 },
                                 onClick = {
-                                    sortOption = ManagementSortOption.OLDEST
+                                    sortOption = ManagementSortOption.OLDEST_ADDED
                                     showSortMenu = false
                                 }
                             )
@@ -214,7 +216,7 @@ fun ActorManagementScreen(
                     }
 
                     IconButton(onClick = { showAddDialog = true }, modifier = Modifier.testTag("add_actor_button")) {
-                        Icon(painter = painterResource(id = R.drawable.ic_actor_add), contentDescription = "Add Actor", tint = accent)
+                        Icon(painter = painterResource(id = R.drawable.ic_actor_add), contentDescription = "Add Actor", tint = palette.textPrimary, modifier = Modifier.size(24.dp))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = palette.surface)

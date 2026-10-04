@@ -1299,11 +1299,11 @@ private fun IconStylePicker(
     val accent = LocalAccentColor.current
     val palette = LocalVaultPalette.current // MUSE-REF
     val options = listOf(
-        Triple("Inverted", Color(0xFFF3F4F6), Color.Black),
-        Triple("Default", Color(0xFF58595e), Color.White),
-        Triple("Blue", Color(0xFF3B82F6), Color.White),
-        Triple("Orange", Color(0xFFD97706), Color.White),
-        Triple("Dark", Color(0xFF1F2937), Color.White)
+        Triple("Inverted", Color(0xFFE3E4E6), Color(0xFF1C1C1E)),
+        Triple("Default", Color(0xFF66676C), Color.White),
+        Triple("Blue", Color(0xFF223A73), Color.White),
+        Triple("Orange", Color(0xFF8F6038), Color.White),
+        Triple("Dark", Color(0xFFF2545B), Color.White)
     )
 
     Column(
